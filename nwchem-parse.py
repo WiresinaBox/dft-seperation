@@ -89,12 +89,40 @@ class nwchem_parser():
         self.fn = fn
         inFile = open(fn, 'r')
         
-        for line in inFile:
-            print(line)
-            #Call methods, get data.  
+        module = 'start'
+        prevsection = 'start'
+        section = 'start'
+        lineBuffer = [] #holds lines to then pass off to each method parser
+        for linein in inFile:
+            line = linein.strip()
+            #Are whitespaces needed? I'm going to skip them
+            if line == '': continue
+            #Marks the start/end of sections
+            if line.startswith('Job information'): section = 'jobinfo'
+            elif line.startswith('Memory information'): section = 'meminfo'
+            elif line.startswith('Directory information'): section = 'dirinfo'
+            
+            if line.startswith('NWChem Input Module'): module = 'input'
+            if line.startswith('Geometry'): section = 'geo'
+
+            #Stats recording sections
+            if section == 'jobinfo': lineBuffer.append(line)
+            
+            
+            
+            #Checks if the section has changed. If so call the appropriate function.
+            if section != prevsection:
+                if prevsection == 'jobinfo': self._jobinfo_parser(lineBuffer)
+
+
+                prevsection = section
+                lineBuffer = []
 
     #Put methods here to grab data from each section.
-
+    def _jobinfo_parser(self, lines):
+        """Parses the job info section."""
+        for line in lines:
+            print(line)
 
 
 if __name__ == '__main__':
