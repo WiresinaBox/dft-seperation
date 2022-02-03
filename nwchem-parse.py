@@ -1,6 +1,32 @@
 import os
 import sys
 
+class atom():
+    """Contains all the information for atom specific information. Species, Iterations, Orbital information etc."""
+    _id = None
+    _species = None
+    _charge = None
+    
+    @property
+    def species(self): return self._species
+    @species.setter
+    def species(self, val): self._species = val
+    @property
+    def id(self): return self._id
+    @id.setter
+    def id(self, val): self._id = val
+    @property
+    def charge(self): return self._charge
+    @charge.setter
+    def charge(self, val): self._charge = val
+
+    def __init__(self, id=None, species=None, charge=None):
+        self._id = id
+        self._species = species
+        self._charge = charge
+
+    def __repr__(self):
+        return 'atom({},{})'.format(self._id, self._species)
 
 class nwchem_parser():
     #nwchem.out sections
@@ -83,11 +109,48 @@ class nwchem_parser():
         Energy per Step
 
     """
-    energy_total = None
-    energy_1e = None
-    energy_2e = None
-    energy_HOMO = None
-    energy_LUMO = None
+    _atom_list = list()
+    _energy_total = None
+    _energy_1e = None
+    _energy_2e = None
+    _energy_HOMO = None
+    _energy_LUMO = None
+
+
+    
+    #Getters and Setters
+    @property
+    def energy_total(self): return self._energy_total
+    @energy_total.setter
+    def energy_total(self, val): self._energy_total = val
+    
+    @property
+    def energy_1e(self): return self._energy_1e
+    @energy_1e.setter
+    def energy_1e(self, val): self._energy_1e = val
+    
+    @property
+    def energy_2e(self): return self._energy_2e
+    @energy_2e.setter
+    def energy_2e(self, val): self._energy_2e = val
+    
+    @property
+    def energy_HOMO(self): return self._energy_HOMO
+    @energy_HOMO.setter
+    def energy_HOMO(self, val): self._energy_HOMO = val
+    
+    @property
+    def energy_LUMO(self): return self._energy_LUMO
+    @energy_LUMO.setter
+    def energy_LUMO(self, val): self._energy_LUMO = val
+    
+    @property
+    def atom_list(self): return self._atom_list
+    @atom_list.setter
+    def atom_list(self, val): self._atom_list = val
+    def get_by_species(self, species):
+        return [atom for atom in self._atom_list if atom.species == species]
+
 
     def __init__(self, fn):
         self.fn = fn
@@ -154,6 +217,7 @@ class nwchem_parser():
             if section != prevsection:
                 print(part, module, section)
                 if prevsection == 'jobinfo': self._jobinfo_parser(lineBuffer)
+                if prevsection == 'geo' and module == 'opt': self._geo_parser(lineBuffer)
                 if prevsection == 'nonvarinfo': self._nonvarinfo_parser(lineBuffer)
 
 
@@ -168,17 +232,28 @@ class nwchem_parser():
         """Parses the job info section."""
         for line in lines:
             print(line)
+    def _geo_parser(self, lines):
+        for line in lines[5:]:
+            dat = line.split()
+            print(dat)
+            a = atom(id = int(dat[0]), species = dat[1], charge = float(dat[2]))
+            self._atom_list.append(a)
+                
     def _nonvarinfo_parser(self, lines):
         for line in lines[2:-1]:
             dat = line.partition('=')
             print(dat[0])
-            if dat[0].strip() == 'Total energy': self.energy_total = float(dat[2])
-            if dat[0].strip() == '1-e energy': self.energy_1e = float(dat[2])
-            if dat[0].strip() == '2-e energy': self.energy_2e = float(dat[2])
-            if dat[0].strip() == 'HOMO': self.energy_HOMO = float(dat[2]) #Highest occupied molecular orbital
-            if dat[0].strip() == 'LUMO': self.energy_LUMO = float(dat[2]) #Lowest unoccupied molecular orbital
+            if dat[0].strip() == 'Total energy': self._energy_total = float(dat[2])
+            if dat[0].strip() == '1-e energy': self._energy_1e = float(dat[2])
+            if dat[0].strip() == '2-e energy': self._energy_2e = float(dat[2])
+            if dat[0].strip() == 'HOMO': self._energy_HOMO = float(dat[2]) #Highest occupied molecular orbital
+            if dat[0].strip() == 'LUMO': self._energy_LUMO = float(dat[2]) #Lowest unoccupied molecular orbital
+
+    
 
 if __name__ == '__main__':
     fn = sys.argv[1]
     nw = nwchem_parser(fn)
     print(nw.energy_total, nw.energy_1e, nw.energy_2e, nw.energy_HOMO, nw.energy_LUMO)
+    print(nw.atom_list)
+    print(nw.get_by_species('O'))
