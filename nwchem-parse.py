@@ -1,7 +1,58 @@
 import os
 import sys
+import numpy as np
 
-class atom():
+
+class nw_orbital():
+    """Contains information for each alpha/beta orbital"""
+    _E = None #Energy
+    _occ = None #occupancy
+    _vector = None #Which basis set expansion vector.
+    _basisfuncs = list() #list of tuples (bfn, coeff, atom, function)
+    _center = None #tuple
+    _r2 = None 
+    _spin = None #alpha or beta 
+    @property
+    def E(self): return self._E
+    @E.setter
+    def E(self, val): self._E = val
+    @property
+    def occ(self): return self._occ
+    @occ.setter
+    def occ(self, val): self._occ = val
+    @property
+    def vector(self): return self._vector
+    @vector.setter
+    def vector(self, val): self._vector = val
+    @property
+    def basisfuncs(self): return self._basisfuncs
+    @basisfuncs.setter
+    def basisfuncs(self, val): self._basisfuncs = val
+    def add_basisfunc(self, bfn, coeff, atom, orbital):
+        self._basisfuncs.append((bfn, coeff, atom, orbital))
+
+    @property
+    def center(self): return self._center
+    @center.setter
+    def center(self, val): self._center = np.array(val)
+    
+    @property
+    def spin(self): return self._spin
+    @spin.setter
+    def spin(self, val): 
+        if val in [1/2, "1/2", "0.5", 'alpha']: self._spin = 1/2
+        elif val in [-1/2, "-1/2", "-0.5", 'beta']: self._spin = -1/2
+
+    def __init__(self,vector, E=None, occ=None, basisfuncs=[], spin=None):
+        self._E = E
+        self._occ = occ
+        self._vector = vector
+        self._basisfuncs = basisfuncs
+
+    def __repr__(self):
+        return 'orbital({}, {})'.format(self._vector, self._spin)
+
+class nw_atom():
     """Contains all the information for atom specific information. Species, Iterations, Orbital information etc."""
     _id = None
     _species = None
@@ -109,47 +160,74 @@ class nwchem_parser():
         Energy per Step
 
     """
-    _atom_list = list()
-    _energy_total = None
-    _energy_1e = None
-    _energy_2e = None
-    _energy_HOMO = None
-    _energy_LUMO = None
-
+    _runinfo = dict()
+    _atom_dict = dict()
+    _orbital_dict_alpha = dict()
+    _orbital_dict_beta = dict()
+    _energies = dict()
 
     
     #Getters and Setters
     @property
-    def energy_total(self): return self._energy_total
-    @energy_total.setter
-    def energy_total(self, val): self._energy_total = val
+    def energies(self): return self._energies
+    @energies.setter
+    def energies(self, val): self._energies = val
+    
     
     @property
-    def energy_1e(self): return self._energy_1e
-    @energy_1e.setter
-    def energy_1e(self, val): self._energy_1e = val
+    def atom_dict(self): return self._atom_dict
+    @atom_dict.setter
+    def atom_dict(self, val): self._atom_dict = val
     
     @property
-    def energy_2e(self): return self._energy_2e
-    @energy_2e.setter
-    def energy_2e(self, val): self._energy_2e = val
+    def runinfo(self): return self._runinfo
+    @runinfo.setter
+    def runinfo(self, val): self._runinfo = val
     
     @property
-    def energy_HOMO(self): return self._energy_HOMO
-    @energy_HOMO.setter
-    def energy_HOMO(self, val): self._energy_HOMO = val
+    def orbital_dict_alpha(self): return self._orbital_dict_alpha
+    @orbital_dict_alpha.setter
+    def orbital_dict_alpha(self, val): self._orbital_dict_alpha = val
     
     @property
-    def energy_LUMO(self): return self._energy_LUMO
-    @energy_LUMO.setter
-    def energy_LUMO(self, val): self._energy_LUMO = val
+    def orbital_dict_beta(self): return self._orbital_dict_beta
+    @orbital_dict_beta.setter
+    def orbital_dict_beta(self, val): self._orbital_dict_beta = val
     
-    @property
-    def atom_list(self): return self._atom_list
-    @atom_list.setter
-    def atom_list(self, val): self._atom_list = val
-    def get_by_species(self, species):
-        return [atom for atom in self._atom_list if atom.species == species]
+    def get_orbital_dict(self):
+        a= {(o.vector, o.spin):o for o in self._orbital_dict_alpha.values()}
+        a.update({(o.vector, o.spin):o for o in self._orbital_dict_beta.values()})
+        return a
+
+    def get_atoms(self, id = None, species = None, alwaysAsList=False):
+        """Returns a list of atoms given the specified constraints. If none are given then returns all atoms."""
+        idList = []
+        speciesList = []
+        returnList = []
+        if isinstance(id, (list, tuple)): idList.extend(id)
+        elif not isinstance(id, type(None)): idList.append(id)
+        if isinstance(species, (list, tuple)): speciesList.extend(species)
+        elif not isinstance(species, type(None)): speciesList.append(species)
+        for a in self._atom_dict.values():
+            if len(idList) > 0 and a.id in idList:
+                idpass = True 
+            elif len(idList) == 0: 
+                idpass = True
+            else:
+                idpass = False
+            
+            if len(speciesList) > 0 and a.species in speciesList:
+                speciespass = True 
+            elif len(speciesList) == 0: 
+                speciespass = True
+            else:
+                speciespass = False
+
+            if idpass and speciespass:
+                returnList.append(a)
+        if len(returnList) == 1 and not alwaysAsList: return returnList[0]
+        else: return returnList
+    
 
 
     def __init__(self, fn):
@@ -198,7 +276,8 @@ class nwchem_parser():
             if line.startswith('convergence'): section = 'convergence'
             if line.startswith('Total DFT energy'): section = 'dftenergy'
             
-            if line.startswith('DFT Final'): section = 'moanalysis'
+            if line.startswith('DFT Final Alpha'): section = 'moalpha'
+            if line.startswith('DFT Final Beta'): section = 'mobeta'
             if line.startswith('alpha - beta orbital overlaps'): section = 'aboverlap'
             if line.startswith('alpha - beta orbital overlaps'): section = 'aboverlap'
             if line.startswith('Expectation of S2'): section = 'S2'
@@ -219,7 +298,8 @@ class nwchem_parser():
                 if prevsection == 'jobinfo': self._jobinfo_parser(lineBuffer)
                 if prevsection == 'geo' and module == 'opt': self._geo_parser(lineBuffer)
                 if prevsection == 'nonvarinfo': self._nonvarinfo_parser(lineBuffer)
-
+                if prevsection == 'moalpha': self._moparser(lineBuffer, 'alpha')
+                if prevsection == 'mobeta': self._moparser(lineBuffer, 'beta')
 
                 prevsection = section
                 lineBuffer = []
@@ -230,30 +310,78 @@ class nwchem_parser():
     #Put methods here to grab data from each section.
     def _jobinfo_parser(self, lines):
         """Parses the job info section."""
-        for line in lines:
-            print(line)
+        for line in lines[2:]:
+            dat = line.partition('=')
+            print(dat)
+            if dat[0].strip() == 'date': self._runinfo['date'] = dat[2]
+            if dat[0].strip() == 'nwchem branch': self._runinfo['NW_branch'] = dat[2]
+            if dat[0].strip() == 'nwchem revision': self._runinfo['NW_revision'] = dat[2]
+            if dat[0].strip() == 'ga revision': self._runinfo['GA_revision'] = dat[2]
+            if dat[0].strip() == 'prefix': self._runinfo['prefix'] = dat[2]
+        print(self._runinfo)
     def _geo_parser(self, lines):
         for line in lines[5:]:
             dat = line.split()
-            print(dat)
-            a = atom(id = int(dat[0]), species = dat[1], charge = float(dat[2]))
-            self._atom_list.append(a)
+            a = nw_atom(id = int(dat[0]), species = dat[1], charge = float(dat[2]))
+            self._atom_dict[a.id] = a
                 
     def _nonvarinfo_parser(self, lines):
         for line in lines[2:-1]:
             dat = line.partition('=')
-            print(dat[0])
-            if dat[0].strip() == 'Total energy': self._energy_total = float(dat[2])
-            if dat[0].strip() == '1-e energy': self._energy_1e = float(dat[2])
-            if dat[0].strip() == '2-e energy': self._energy_2e = float(dat[2])
-            if dat[0].strip() == 'HOMO': self._energy_HOMO = float(dat[2]) #Highest occupied molecular orbital
-            if dat[0].strip() == 'LUMO': self._energy_LUMO = float(dat[2]) #Lowest unoccupied molecular orbital
+            if dat[0].strip() == 'Total energy': self._energies["total"] = float(dat[2])
+            if dat[0].strip() == '1-e energy': self._energies["1e"] = float(dat[2])
+            if dat[0].strip() == '2-e energy': self._energies["2e"] = float(dat[2])
+            if dat[0].strip() == 'HOMO': self._energies["HOMO"] = float(dat[2]) #Highest occupied molecular orbital
+            if dat[0].strip() == 'LUMO': self._energies["LUMO"] = float(dat[2]) #Lowest unoccupied molecular orbital
+    def _moparser(self, lines, orbitType):
+        curVect = None
+        for line in lines[2:]:
+            dat = line.split()
+            if line.startswith('Vector'):
+                if not isinstance(curVect, type(None)) and  int(dat[1]) != curVect:
+                    #Append current orbital  
+                    if orbitType == 'alpha': 
+                        O.spin= orbitType
+                        self._orbital_dict_alpha[O.vector] = O
+                    elif orbitType == 'beta': 
+                        O.spin = orbitType
+                        self._orbital_dict_beta[O.vector] = O
+                
+                curVect = int(line[7:13].strip())
+                O = nw_orbital(curVect)
+                O.occ =  int(float(line[18:31].replace('D', 'E'))) #TODO: Doublecheck that D->E number format is ok
+                O.E = float(line[34:48].replace('D', 'E'))
+            elif line.startswith('MO Center'):
+                x = float(dat[2].replace('D', 'E').strip(','))
+                y = float(dat[3].replace('D', 'E').strip(','))
+                z = float(dat[4].replace('D', 'E').strip(','))
+                O.center = np.array([x,y,z])
+                O.r2 = float(dat[6].replace('D', 'E'))
+            elif line.startswith('-----'): pass
+            elif line.startswith('Bfn.'): pass
+            else:
+                p1 = line[0:38].strip().split()
+                p2 = line[38:].strip().split()
+                #print('p1:',p1)
+                #print('p2:',p2)
+                if len(p1) > 0:
+                    atom = self.get_atoms(id = int(p1[2]), species = p1[3])
+                    O.add_basisfunc(int(p1[0]), float(p1[1]), atom, p1[4])
+                if len(p2) > 0:
+                    atom = self.get_atoms(id = int(p2[2]), species = p2[3])
+                    O.add_basisfunc(int(p2[0]), float(p2[1]), atom, p2[4])
 
-    
+        if orbitType == 'alpha': 
+            O.spin= orbitType
+            self._orbital_dict_alpha[O.vector] = O
+        elif orbitType == 'beta': 
+            O.spin = orbitType
+            self._orbital_dict_beta[O.vector] = O
 
 if __name__ == '__main__':
     fn = sys.argv[1]
     nw = nwchem_parser(fn)
-    print(nw.energy_total, nw.energy_1e, nw.energy_2e, nw.energy_HOMO, nw.energy_LUMO)
-    print(nw.atom_list)
-    print(nw.get_by_species('O'))
+    print(nw.energies) 
+    print(nw.runinfo)
+    print(nw.get_atoms(id = 5, alwaysAsList=True))
+    print(nw.get_orbital_dict())
