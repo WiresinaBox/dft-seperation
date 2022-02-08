@@ -1,7 +1,7 @@
 import os
 import sys
 import numpy as np
-
+import re
 
 class nw_orbital():
     """Contains information for each alpha/beta orbital"""
@@ -57,6 +57,9 @@ class nw_atom():
     _id = None
     _species = None
     _charge = None
+    _shell_charges = None
+    _coordinates = None
+    _gradient_forces = None
     
     @property
     def species(self): return self._species
@@ -70,11 +73,26 @@ class nw_atom():
     def charge(self): return self._charge
     @charge.setter
     def charge(self, val): self._charge = val
+    @property
+    def shell_charges(self): return self._shell_charges
+    @shell_charges.setter
+    def shell_charges(self, val): self._shell_charges = val
+    @property
+    def coordinates(self): return self._coordinates
+    @coordinates.setter
+    def coordinates(self, val): self._coordinates = val
+    @property
+    def gradient_forces(self): return self._gradient_forces
+    @gradient_forces.setter
+    def gradient_forces(self, val): self._gradient_forces = val
 
-    def __init__(self, id=None, species=None, charge=None):
+    def __init__(self, id=None, species=None, charge=None, shell_charges=None, coordinates=None, gradient_forces=None):
         self._id = id
         self._species = species
         self._charge = charge
+        self._shell_charges = shell_charges
+        self._coordinates = coordinates
+        self._gradient_forces = gradient_forces
 
     def __repr__(self):
         return 'atom({},{})'.format(self._id, self._species)
@@ -165,6 +183,9 @@ class nwchem_parser():
     _orbital_dict_alpha = dict()
     _orbital_dict_beta = dict()
     _energies = dict()
+    _total_density = dict()
+    _spin_density = dict()
+    _gradient_dict = dict()
 
     
     #Getters and Setters
@@ -193,6 +214,21 @@ class nwchem_parser():
     def orbital_dict_beta(self): return self._orbital_dict_beta
     @orbital_dict_beta.setter
     def orbital_dict_beta(self, val): self._orbital_dict_beta = val
+
+    @property
+    def total_density(self): return self._total_density
+    @total_density.setter
+    def total_density(self, val): self._total_density = val
+
+    @property
+    def spin_density(self): return self._spin_density
+    @spin_density.setter
+    def spin_density(self, val): self._spin_density = val
+
+    @property
+    def gradient_dict(self): return self._gradient_dict
+    @gradient_dict.setter
+    def gradient_dict(self, val): self._gradient_dict
     
     def get_orbital_dict(self):
         a= {(o.vector, o.spin):o for o in self._orbital_dict_alpha.values()}
@@ -298,8 +334,11 @@ class nwchem_parser():
                 if prevsection == 'jobinfo': self._jobinfo_parser(lineBuffer)
                 if prevsection == 'geo' and module == 'opt': self._geo_parser(lineBuffer)
                 if prevsection == 'nonvarinfo': self._nonvarinfo_parser(lineBuffer)
+                if prevsection == 'totden': self._totalDensity_parser(lineBuffer)
+                if prevsection == 'spinden': self._spinDensity_parser(lineBuffer)
                 if prevsection == 'moalpha': self._moparser(lineBuffer, 'alpha')
                 if prevsection == 'mobeta': self._moparser(lineBuffer, 'beta')
+                if prevsection == 'dftgrad': self._gradient_parser(lineBuffer)
 
                 prevsection = section
                 lineBuffer = []
@@ -333,12 +372,51 @@ class nwchem_parser():
             if dat[0].strip() == '2-e energy': self._energies["2e"] = float(dat[2])
             if dat[0].strip() == 'HOMO': self._energies["HOMO"] = float(dat[2]) #Highest occupied molecular orbital
             if dat[0].strip() == 'LUMO': self._energies["LUMO"] = float(dat[2]) #Lowest unoccupied molecular orbital
+
+    def _totalDensity_parser(self, lines):
+        data = []
+        r = lines[0]
+        r = r.split("-")
+        data.append(r[1].strip())
+        for line in lines[4:]:
+            atom = nw_atom()
+            dat = line.split()
+            if(len(dat) < 2):
+                break
+            atom.id = dat[0]
+            atom.species = dat[1]
+            ch = dat[3]
+            atom.charge = ch
+            atom.shell_charges = dat[4:]
+            data.append(atom)
+            continue
+        self._total_density = data
+
+    def _spinDensity_parser(self, lines):
+        data = []
+        r = lines[0]
+        r = r.split("-")
+        data.append(r[1].strip())
+        for line in lines[4:]:
+            atom = nw_atom()
+            dat = line.split()
+            if (len(dat) < 2):
+                break
+            atom.id = dat[0]
+            atom.species = dat[1]
+            ch = dat[3]
+            atom.charge = ch
+            atom.shell_charges = dat[4:]
+            data.append(atom)
+            continue
+        self._spin_density = data
+
     def _moparser(self, lines, orbitType):
         curVect = None
         for line in lines[2:]:
             dat = line.split()
             if line.startswith('Vector'):
-                if not isinstance(curVect, type(None)) and  int(dat[1]) != curVect:
+                if not isinstance(curVect, type(None)) and int(dat[1]) != curVect:
                     #Append current orbital  
                     if orbitType == 'alpha': 
                         O.spin= orbitType
@@ -377,6 +455,59 @@ class nwchem_parser():
         elif orbitType == 'beta': 
             O.spin = orbitType
             self._orbital_dict_beta[O.vector] = O
+
+    def _gradient_parser(self, lines):
+        i = 2
+        for line in lines[2:]:
+            dat = line.partition("=")
+            if dat[0].strip() == 'charge': self._gradient_dict['charge'] = dat[2]
+            if dat[0].strip() == 'wavefunction': self._gradient_dict['wavefunction'] = dat[2]
+            if dat[0].strip() == 'texas integral default override: limxmem': self._gradient_dict['limxmem'] = dat[2]
+            i += 1
+            if dat[0].strip() == 'DFT ENERGY GRADIENTS': break
+        data = []
+        j = i + 2
+        for line in lines[i+2:]:
+            j += 1
+            atom = nw_atom()
+            dat = line.split()
+            if (len(dat) < 2):
+                break
+            atom.id = dat[0]
+            atom.species = dat[1]
+            atom.coordinates = dat[2:5]
+            atom.gradient_forces = dat[5:]
+            data.append(atom)
+        self._gradient_dict['atoms'] = data
+        data = []
+        k = 0
+        for line in lines[j:]:
+            j += 1
+            da = []
+            dat = line.split()
+            if(len(dat) < 2):
+                k += 1
+                if(k == 3):
+                    break
+                continue
+            da.append(dat[1])
+            da.append(dat[3])
+            da.append(dat[5])
+            data.append(da)
+        line1 = lines[j]
+        result = [x for x in re.split("\s{2,}",line1) if x]
+        line1 = result
+        line1[0] = 'Step'
+        line2 = lines[j+2]
+        line2 = line2.split()
+        line2 = line2[1:]
+        run = dict()
+        l = 0
+        while(l < len(line1)):
+            run[line1[l]] = line2[l]
+            l += 1
+        self._gradient_dict['Time Info'] = data
+        self._gradient_dict['Step Info'] = run
 
 if __name__ == '__main__':
     fn = sys.argv[1]
