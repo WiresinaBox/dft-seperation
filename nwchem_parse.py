@@ -5,13 +5,7 @@ import numpy as np
 
 class nw_orbital():
     """Contains information for each alpha/beta orbital"""
-    _E = None #Energy
-    _occ = None #occupancy
-    _vector = None #Which basis set expansion vector.
-    _basisfuncs = list() #list of tuples (bfn, coeff, atom, function)
-    _center = None #tuple
-    _r2 = None 
-    _spin = None #alpha or beta 
+
     @property
     def E(self): return self._E
     @E.setter
@@ -24,39 +18,65 @@ class nw_orbital():
     def vector(self): return self._vector
     @vector.setter
     def vector(self, val): self._vector = val
+   
     @property
     def basisfuncs(self): return self._basisfuncs
     @basisfuncs.setter
     def basisfuncs(self, val): self._basisfuncs = val
+    
     def add_basisfunc(self, bfn, coeff, atom, orbital):
+        self._basisatoms.add(atom)
         self._basisfuncs.append((bfn, coeff, atom, orbital))
+    
+    @property
+    def basisatoms(self): return self._basisatoms
+    @basisatoms.setter
+    def basisatoms(self, val): self._basisatoms = val
+
 
     @property
     def center(self): return self._center
     @center.setter
     def center(self, val): self._center = np.array(val)
     
+    def set_spin(self, val): 
+        if val in [1/2, "1/2", "0.5", 'alpha', 'up']: 
+            self._spin = 'up'
+            self._ms = 1/2
+        elif val in [-1/2, "-1/2", "-0.5", 'beta', 'down']: 
+            self._spin = 'down'
+            self._ms = -1/2
+    
     @property
     def spin(self): return self._spin
     @spin.setter
-    def spin(self, val): 
-        if val in [1/2, "1/2", "0.5", 'alpha']: self._spin = 1/2
-        elif val in [-1/2, "-1/2", "-0.5", 'beta']: self._spin = -1/2
+    def spin(self, val): self.set_spin(val)
+    
+    @property
+    def ms(self): return self._ms
+    @ms.setter
+    def ms(self, val): self.set_spin(val) 
 
     def __init__(self,vector, E=None, occ=None, basisfuncs=[], spin=None):
         self._E = E
         self._occ = occ
         self._vector = vector
-        self._basisfuncs = basisfuncs
+        self._basisatoms = set()
+        self._basisfuncs = []# basisfuncsList
+        for bfn, coeff, atom, orbital in basisfuncs:
+            self.add_basisfunc(bfn, coeff, atom, orbital)
+
+        self._center = None #tuple
+        self._r2 = None 
+        self._ms = None #1/2, -1/2
+        self._spin = None #'up', 'down'
 
     def __repr__(self):
-        return 'orbital({}, {})'.format(self._vector, self._spin)
+        return 'orbital({}, {}, {})'.format(self._vector, self._spin, self._occ)
+    
 
 class nw_atom():
     """Contains all the information for atom specific information. Species, Iterations, Orbital information etc."""
-    _id = None
-    _species = None
-    _charge = None
     
     @property
     def species(self): return self._species
@@ -160,11 +180,6 @@ class nwchem_parser():
         Energy per Step
 
     """
-    _runinfo = dict()
-    _atom_dict = dict()
-    _orbital_dict_alpha = dict()
-    _orbital_dict_beta = dict()
-    _energies = dict()
 
     
     #Getters and Setters
@@ -178,6 +193,11 @@ class nwchem_parser():
     def atom_dict(self): return self._atom_dict
     @atom_dict.setter
     def atom_dict(self, val): self._atom_dict = val
+    
+    @property
+    def atom_species(self): return self._atom_species
+    @atom_species.setter
+    def atom_species(self, val): self._atom_species = val
     
     @property
     def runinfo(self): return self._runinfo
@@ -194,10 +214,82 @@ class nwchem_parser():
     @orbital_dict_beta.setter
     def orbital_dict_beta(self, val): self._orbital_dict_beta = val
     
-    def get_orbital_dict(self):
-        a= {(o.vector, o.spin):o for o in self._orbital_dict_alpha.values()}
-        a.update({(o.vector, o.spin):o for o in self._orbital_dict_beta.values()})
-        return a
+    @property
+    def HOMO(self): return self._HOMO
+    @HOMO.setter
+    def HOMO(self, val): self._HOMO = val
+    @property
+    def LUMO(self): return self._LUMO
+    @LUMO.setter
+    def LUMO(self, val): self._LUMO = val
+    
+    def get_orbitals(self, vector=None, spin='both', basisId=None, basisSpecies = None, asList = False, conjunction=False):
+        """Returns either a list or a dictionary of orbitals given certain conditions.
+
+        if conjuction = True, then *all* basis function conditions must match. Otherwise only one condition has to match
+        e.g. if conjunction = True, basisSpecies = 'La', then only will return orbitals where all basis functions are from lanthenide.
+        """
+        if spin == 'both':
+            a= {(o.vector, o.spin):o for o in self._orbital_dict_alpha.values()}
+            a.update({(o.vector, o.spin):o for o in self._orbital_dict_beta.values()})
+        elif spin in [1/2, "1/2", "0.5", 'alpha', 'up']: 
+            a= {(o.vector, o.spin):o for o in self._orbital_dict_alpha.values()}
+        elif spin in [-1/2, "-1/2", "-0.5", 'beta', 'down']: 
+            a= {(o.vector, o.spin):o for o in self._orbital_dict_beta.values()}
+        
+
+        vectorList = []
+        basisIdList = []
+        basisSpeciesList = []
+        
+        if isinstance(vector, (list, tuple)): vectorList.extend(vector)
+        elif not isinstance(vector, type(None)): vectorList.append(vector)
+        
+        if isinstance(basisId, (list, tuple)): basisIdList.extend(basisId)
+        elif not isinstance(basisId, type(None)): basisIdList.append(basisId)
+        
+        if isinstance(basisSpecies, (list, tuple)): basisSpeciesList.extend(basisSpecies)
+        elif not isinstance(basisSpecies, type(None)): basisSpeciesList.append(basisSpecies)
+       
+        if asList: r = []
+        else: r = {}
+        for key, o in a.items():
+            if o.vector in vectorList: vectorPass = True
+            elif len(vectorList) == 0: vectorPass = True
+            else: vectorPass = False
+            
+            #Probably an easier way to do this...
+            if conjunction: idPass = True #all must pass or else turn to false
+            else: idPass = False #takes one truth to turn it to true always
+            if conjunction: speciesPass = True 
+            else: speciesPass = False #
+            
+            for bfn, coeff, atom, function in o.basisfuncs:
+                if conjunction: idPass = idPass and atom.id in basisIdList #One False will make it false
+                else: idPass = idPass or atom.id in basisIdList #One truth will turn it to truth
+                if conjunction: speciesPass = speciesPass and atom.species in basisSpeciesList #One False will make it false
+                else: speciesPass = speciesPass or atom.species in basisSpeciesList #One truth will turn it to truth
+                
+                 
+            #General cases
+            if len(basisIdList) == 0: idPass = True
+            if len(basisSpeciesList) == 0: speciesPass = True
+            if vectorPass and idPass and speciesPass:
+                if asList: r.append(o)
+                else: r[key] = o
+
+        return r 
+
+    def get_HOMO_LUMO(self, **kwargs):
+        """This method gets the homo and lumo based on conditions specified in get_atoms()"""
+        if len(kwargs) == 0: return self._HOMO, self._LUMO
+        orbitalList = self.get_orbitals(asList=True, **kwargs)
+        HOMO = None
+        LUMO = None
+        for O in orbitalList:
+            if (isinstance(HOMO, type(None)) or HOMO.E < O.E ) and O.occ == 1: HOMO = O 
+            if (isinstance(LUMO, type(None)) or LUMO.E > O.E ) and O.occ == 0: LUMO = O 
+        return HOMO, LUMO
 
     def get_atoms(self, id = None, species = None, alwaysAsList=False):
         """Returns a list of atoms given the specified constraints. If none are given then returns all atoms."""
@@ -228,9 +320,21 @@ class nwchem_parser():
         if len(returnList) == 1 and not alwaysAsList: return returnList[0]
         else: return returnList
     
-
+     
 
     def __init__(self, fn):
+    
+        self._runinfo = dict()
+        self._atom_dict = dict()
+        self._atom_species = set()
+        self._orbital_dict_alpha = dict()
+        self._orbital_dict_beta = dict()
+        self._energies = dict()
+        
+        #orbitals
+        self._HOMO = None
+        self._LUMO = None
+
         self.fn = fn
         inFile = open(fn, 'r')
         
@@ -294,7 +398,7 @@ class nwchem_parser():
             
             #Checks if the section has changed. If so call the appropriate function.
             if section != prevsection:
-                print(part, module, section)
+                #print(part, module, section)
                 if prevsection == 'jobinfo': self._jobinfo_parser(lineBuffer)
                 if prevsection == 'geo' and module == 'opt': self._geo_parser(lineBuffer)
                 if prevsection == 'nonvarinfo': self._nonvarinfo_parser(lineBuffer)
@@ -307,23 +411,26 @@ class nwchem_parser():
             #Stats recording sections
             lineBuffer.append(line)
 
+    def __repr__(self):
+        return 'nwchem_parser({})'.format(self.fn)
     #Put methods here to grab data from each section.
     def _jobinfo_parser(self, lines):
         """Parses the job info section."""
         for line in lines[2:]:
             dat = line.partition('=')
-            print(dat)
+            #print(dat)
             if dat[0].strip() == 'date': self._runinfo['date'] = dat[2]
             if dat[0].strip() == 'nwchem branch': self._runinfo['NW_branch'] = dat[2]
             if dat[0].strip() == 'nwchem revision': self._runinfo['NW_revision'] = dat[2]
             if dat[0].strip() == 'ga revision': self._runinfo['GA_revision'] = dat[2]
             if dat[0].strip() == 'prefix': self._runinfo['prefix'] = dat[2]
-        print(self._runinfo)
+        #print(self._runinfo)
     def _geo_parser(self, lines):
         for line in lines[5:]:
             dat = line.split()
             a = nw_atom(id = int(dat[0]), species = dat[1], charge = float(dat[2]))
             self._atom_dict[a.id] = a
+            self._atom_species.add(a.species)
                 
     def _nonvarinfo_parser(self, lines):
         for line in lines[2:-1]:
@@ -346,11 +453,13 @@ class nwchem_parser():
                     elif orbitType == 'beta': 
                         O.spin = orbitType
                         self._orbital_dict_beta[O.vector] = O
+                    if (isinstance(self._HOMO, type(None)) or self._HOMO.E < O.E ) and O.occ == 1: self._HOMO = O 
+                    if (isinstance(self._LUMO, type(None)) or self._LUMO.E > O.E ) and O.occ == 0: self._LUMO = O 
                 
                 curVect = int(line[7:13].strip())
                 O = nw_orbital(curVect)
-                O.occ =  int(float(line[18:31].replace('D', 'E'))) #TODO: Doublecheck that D->E number format is ok
-                O.E = float(line[34:48].replace('D', 'E'))
+                O.occ =  int(float(line[17:31].replace('D', 'E'))) #TODO: Doublecheck that D->E number format is ok
+                O.E = float(line[33:48].replace('D', 'E'))
             elif line.startswith('MO Center'):
                 x = float(dat[2].replace('D', 'E').strip(','))
                 y = float(dat[3].replace('D', 'E').strip(','))
@@ -370,18 +479,22 @@ class nwchem_parser():
                 if len(p2) > 0:
                     atom = self.get_atoms(id = int(p2[2]), species = p2[3])
                     O.add_basisfunc(int(p2[0]), float(p2[1]), atom, p2[4])
-
         if orbitType == 'alpha': 
             O.spin= orbitType
             self._orbital_dict_alpha[O.vector] = O
         elif orbitType == 'beta': 
             O.spin = orbitType
             self._orbital_dict_beta[O.vector] = O
+        if (isinstance(self._HOMO, type(None)) or self._HOMO.E < O.E ) and O.occ == 1: self._HOMO = O 
+        if (isinstance(self._LUMO, type(None)) or self._LUMO.E > O.E ) and O.occ == 0: self._LUMO = O 
+    
+
 
 if __name__ == '__main__':
     fn = sys.argv[1]
     nw = nwchem_parser(fn)
-    print(nw.energies) 
-    print(nw.runinfo)
-    print(nw.get_atoms(id = 5, alwaysAsList=True))
-    print(nw.get_orbital_dict())
+    #print(nw.energies) 
+    #print(nw.runinfo)
+    #print(nw.get_atoms(id = 5, alwaysAsList=True))
+    #print(nw.get_orbital_dict())
+    #print(nw)
