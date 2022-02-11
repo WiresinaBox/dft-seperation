@@ -29,7 +29,17 @@ class nw_orbital():
     @basisfuncs.setter
     def basisfuncs(self, val): self._basisfuncs = val
     def add_basisfunc(self, bfn, coeff, atom, orbital):
+        self._basisatoms.add(atom)
         self._basisfuncs.append((bfn, coeff, atom, orbital))
+    
+    @property
+    def basisatoms(self): return self._basisatoms
+    @basisatoms.setter
+    def basisatoms(self, val): self._basisatoms = val
+
+
+
+
     @property
     def center(self): return self._center
     @center.setter
@@ -251,6 +261,7 @@ class nwchem_parser():
         HOMO = None
         LUMO = None
         for O in orbitalList:
+            print(O, O.occ)
             if (isinstance(HOMO, type(None)) or HOMO.E < O.E ) and O.occ == 1: HOMO = O 
             if (isinstance(LUMO, type(None)) or LUMO.E > O.E ) and O.occ == 0: LUMO = O 
         if setFlags:
@@ -262,7 +273,60 @@ class nwchem_parser():
     def gradient_dict(self): return self._gradient_dict
     @gradient_dict.setter
     def gradient_dict(self, val): self._gradient_dict
-
+    
+    def get_orbitals(self, vector=None, spin='both', basisId=None, basisSpecies = None, asList = False, conjunction=False):
+        """Returns either a list or a dictionary of orbitals given certain conditions.
+        if conjuction = True, then *all* basis function conditions must match. Otherwise only one condition has to match
+        e.g. if conjunction = True, basisSpecies = 'La', then only will return orbitals where all basis functions are from lanthenide.
+        """
+        if spin == 'both':
+            a= {(o.vector, o.spin):o for o in self._orbital_dict_alpha.values()}
+            a.update({(o.vector, o.spin):o for o in self._orbital_dict_beta.values()})
+        elif spin in [1/2, "1/2", "0.5", 'alpha', 'up']: 
+            a= {(o.vector, o.spin):o for o in self._orbital_dict_alpha.values()}
+        elif spin in [-1/2, "-1/2", "-0.5", 'beta', 'down']: 
+            a= {(o.vector, o.spin):o for o in self._orbital_dict_beta.values()}
+        
+        vectorList = []
+        basisIdList = []
+        basisSpeciesList = []
+        
+        if isinstance(vector, (list, tuple)): vectorList.extend(vector)
+        elif not isinstance(vector, type(None)): vectorList.append(vector)
+        
+        if isinstance(basisId, (list, tuple)): basisIdList.extend(basisId)
+        elif not isinstance(basisId, type(None)): basisIdList.append(basisId)
+        
+        if isinstance(basisSpecies, (list, tuple)): basisSpeciesList.extend(basisSpecies)
+        elif not isinstance(basisSpecies, type(None)): basisSpeciesList.append(basisSpecies)
+       
+        if asList: r = []
+        else: r = {}
+        for key, o in a.items():
+            if o.vector in vectorList: vectorPass = True
+            elif len(vectorList) == 0: vectorPass = True
+            else: vectorPass = False
+            
+            #Probably an easier way to do this...
+            if conjunction: idPass = True #all must pass or else turn to false
+            else: idPass = False #takes one truth to turn it to true always
+            if conjunction: speciesPass = True 
+            else: speciesPass = False #
+            
+            for bfn, coeff, atom, function in o.basisfuncs:
+                if conjunction: idPass = idPass and atom.id in basisIdList #One False will make it false
+                else: idPass = idPass or atom.id in basisIdList #One truth will turn it to truth
+                if conjunction: speciesPass = speciesPass and atom.species in basisSpeciesList #One False will make it false
+                else: speciesPass = speciesPass or atom.species in basisSpeciesList #One truth will turn it to truth
+                
+                 
+            #General cases
+            if len(basisIdList) == 0: idPass = True
+            if len(basisSpeciesList) == 0: speciesPass = True
+            if vectorPass and idPass and speciesPass:
+                if asList: r.append(o)
+                else: r[key] = o
+        return r
 
     def get_orbital_dict(self):
         a= {(o.vector, o.spin):o for o in self._orbital_dict_alpha.values()}
@@ -453,8 +517,8 @@ class nwchem_parser():
                 
                 curVect = int(line[7:13].strip())
                 O = nw_orbital(curVect)
-                O.occ =  int(float(line[18:31].replace('D', 'E'))) #TODO: Doublecheck that D->E number format is ok
-                O.E = float(line[34:48].replace('D', 'E'))
+                O.occ =  int(float(line[17:31].replace('D', 'E'))) #TODO: Doublecheck that D->E number format is ok
+                O.E = float(line[33:48].replace('D', 'E'))
             elif line.startswith('MO Center'):
                 x = float(dat[2].replace('D', 'E').strip(','))
                 y = float(dat[3].replace('D', 'E').strip(','))
