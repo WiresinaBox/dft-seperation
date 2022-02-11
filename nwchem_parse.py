@@ -57,6 +57,9 @@ class nw_orbital():
     @ms.setter
     def ms(self, val): self.set_spin(val) 
 
+    def isHOMO(self): self.isHOMO = True
+    def isLUMO(self): self.isLUMO = True
+
     def __init__(self,vector, E=None, occ=None, basisfuncs=[], spin=None):
         self._E = E
         self._occ = occ
@@ -70,6 +73,10 @@ class nw_orbital():
         self._r2 = None 
         self._ms = None #1/2, -1/2
         self._spin = None #'up', 'down'
+
+        #metainfo
+        self.isHOMO = False
+        self.isLUMO = False
 
     def __repr__(self):
         return 'orbital({}, {}, {})'.format(self._vector, self._spin, self._occ)
@@ -280,8 +287,8 @@ class nwchem_parser():
 
         return r 
 
-    def get_HOMO_LUMO(self, **kwargs):
-        """This method gets the homo and lumo based on conditions specified in get_atoms()"""
+    def get_HOMO_LUMO(self, setFlags=False, **kwargs):
+        """This method gets the homo and lumo based on conditions specified in get_atoms(). setFlags=True sets metainfo in HOMO and LUMO. Be careful about doing multple calls if you do setflags."""
         if len(kwargs) == 0: return self._HOMO, self._LUMO
         orbitalList = self.get_orbitals(asList=True, **kwargs)
         HOMO = None
@@ -289,6 +296,9 @@ class nwchem_parser():
         for O in orbitalList:
             if (isinstance(HOMO, type(None)) or HOMO.E < O.E ) and O.occ == 1: HOMO = O 
             if (isinstance(LUMO, type(None)) or LUMO.E > O.E ) and O.occ == 0: LUMO = O 
+        if setFlags:
+            HOMO.isHOMO=True
+            LUMO.isLUMO = True
         return HOMO, LUMO
 
     def get_atoms(self, id = None, species = None, alwaysAsList=False):
