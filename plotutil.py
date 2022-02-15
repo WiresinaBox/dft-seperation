@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 import mpld3
 from mpld3 import plugins, utils
@@ -7,16 +8,80 @@ import time
 
 
 
+
 class energy_level_ievents(plugins.PluginBase):
     """Holds all the references for energy levels and stuff for use with the interaction portion"""
 
-    JAVASCRIPT = """
-    mpld3.register_plugin("linkedview", LinkedViewPlugin);
-    LinkedViewPlugin.prototype = Object.create(mpld3.Plugin.prototype);
-    LinkedViewPlugin.prototype.constructor = LinkedViewPlugin;
-    LinkedViewPlugin.prototype.requiredProps = ["idpts", "idline", "data"];
-    LinkedViewPlugin.prototype.defaultProps = {}
+    #Ok so PluginBase pulls from some special variables
+    #JAVASCRIPT, js_args_, css_, dict_
+    #dict_ passes all the necessary information into the JS portion
     
+    JAVASCRIPT = """
+    //Register and set up the empty plugin
+    mpld3.register_plugin("energylevels", EnergyLevelsPlugin);
+    EnergyLevelsPlugin.prototype = Object.create(mpld3.Plugin.prototype);
+    EnergyLevelsPlugin.prototype.constructor = EnergyLevelsPlugin;
+    EnergyLevelsPlugin.prototype.requiredProps = ["ids", "data"]; //arguements pulled from the python side.
+    EnergyLevelsPlugin.prototype.defaultProps = {} //keyword arguements
+  
+    //Constructor
+    function EnergyLevelsPlugin(fig, props){
+        mpld3.Plugin.call(this, fig, props);
+    }
+
+
+    //Called upon rendering.
+    EnergyLevelsPlugin.prototype.draw = function(){
+        //this.fig -> figure
+        //this.props.VARIABLE_NAME
+       
+        //create extra HTML objects using d3
+        
+
+        infodiv = d3.select("body")
+                    .append("div")
+                        .attr("class", "infodiv")
+                        .attr("name", "orbitalinfo")
+                        .style("height", 200)
+                        .style("width", "100%")
+        infodiv.append("p")
+            .attr("class", "infotext")
+            .attr("id", "occ")
+            .text('occ')
+        infodiv.append("p")
+            .attr("class", "infotext")
+            .attr("id", "E")
+            .text('E')
+                
+
+        textE = d3.select("#E")
+        
+        textocc = d3.select("#occ")
+
+
+        var objList = []
+        for (var i=0; i < this.props.ids.length; i++) {
+
+            var obj = mpld3.get_element(this.props.ids[i], this.fig);
+            // get_element might return null if the id is a Line2D for some reason. 
+            var data = this.props.data[i];
+            obj.elements()
+                .datum(data)
+                .on("mouseover", function(d,j) {
+                                    changeText(d, j);
+                                })
+        }
+        
+        //d is the datum, specifies points and stuff. i is the index within d of the point just touched.
+        function changeText(d, i){
+            console.log(d);
+            textE.text(d.E);
+            textocc.text(d.occ);
+
+        }
+        
+
+    }
 
     """
 
@@ -39,11 +104,18 @@ class energy_level_ievents(plugins.PluginBase):
     def setup_data(self):
         """This sets up all the data and element ids for usage in the javascript protion"""
         items = self._artistsDict.items()
-        artists = [tup[0] for tup in items]
-        orbitalDat = ["E:{}, occ:{}".format(tup[1].E, tup[1].occ) for tup in items]
+        artists = []
+        orbitalDat = []
+        for tup in items:
+            a, dat = tup
+            if isinstance(a, matplotlib.lines.Line2D): suffix = 'pts'
+            else: suffix = None
+            artists.append(utils.get_id(a, suffix))
+            orbitalDat.append(dat.get_data())
+
 
         self.dict_["type"] ="energylevels"
-        self.dict_["idline"] = utils.get_id(artists)
+        self.dict_["ids"] = artists 
         self.dict_["data"] = orbitalDat
 
     def connect_tooltip_plugin(self, fig = 'self'):
@@ -142,14 +214,19 @@ def plot_energy_level(orbitals, fig = None, ax = None, legend=False,
         
         atomlabel = ''
         for atom in orbital.basisatoms:
-            atomlabel += '{}:{},\n'.format(atom.id, atom.species) 
-        tooltip = plugins.PointLabelTooltip(A[0], labels = ['E:{}, atoms:{}'.format(orbital.E, atomlabel) for i in range(xpointsN)])
+            atomlabel += '{}:{},\n'.format(atom.id, atom.species)
+        
+        #tooltip = plugins.PointLabelTooltip(A[0], labels = ['E:{}, atoms:{}'.format(orbital.E, atomlabel) for i in range(xpointsN)])
         #tooltip = plugins.LineLabelTooltip(A[0], label = 'E:{}, occ:{}'.format(orbital.E, orbital.occ))
-        plugins.connect(fig, tooltip)
+        #plugins.connect(fig, tooltip)
         
         if curstyleid not in handles:
             handles[curstyleid] = A[0]
-  
+
+    if interactive:
+        eventHandler.setup_data()
+        plugins.connect(fig, eventHandler)
+    
     #pickwrapper = lambda event : eventHandler.orbital_pick_info(event) #Dunno why this is needed but doesn't work without it 
     #refreshwrapper = lambda event : eventHandler.refresh(event) #Dunno why this is needed but doesn't work without it 
     #fig.canvas.mpl_connect('pick_event', pickwrapper)

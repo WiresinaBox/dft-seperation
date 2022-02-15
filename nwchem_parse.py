@@ -60,6 +60,21 @@ class nw_orbital():
     def isHOMO(self): self.isHOMO = True
     def isLUMO(self): self.isLUMO = True
 
+    
+    def get_data(self):
+        return {'E':self._E,
+                'occ':self._occ,
+                'vector':self._vector,
+                #'basisatoms':self._basisatoms,
+                #'basisfuncs':self._basisfuncs,
+                'center':self._center,
+                'r2':self._r2,
+                'ms':self._ms,
+                'spin':self._spin,
+                'isHOMO':self.isHOMO,
+                'isLUMO':self.isLUMO,
+                }
+
     def __init__(self,vector, E=None, occ=None, basisfuncs=[], spin=None):
         self._E = E
         self._occ = occ
