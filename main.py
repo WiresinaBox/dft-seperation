@@ -19,16 +19,24 @@ for fn in fnList:
     p = nwparse.nwchem_parser(fn)
     parserList.append(p)
     
-fig, ax = plt.subplots(1,1)#figsize=(10,10))
+fig, ax = plt.subplots(1,1, figsize=(6,7), tight_layout=True)
 for p in parserList:
     #print(p.get_orbital_dict())
     
     orbitalListFull = p.get_orbitals( basisSpecies = None, spin='both', asList = True)
-    fig, ax,handlesFull  = pltu.plot_energy_level(orbitalListFull, fig = fig, ax = ax, interactive=False) #overwriteStyle={'zorder':0, 'alpha':0.05})
+    fig, ax,handlesFull  = pltu.plot_energy_level(orbitalListFull, fig = fig, ax = ax, xlabel='All Orbitals', interactive=False) #overwriteStyle={'zorder':0, 'alpha':0.05})
     
     orbitalList = p.get_orbitals( basisSpecies = 'La', spin='both', asList = True)
     HOMO, LUMO = p.get_HOMO_LUMO(basisSpecies = 'La', spin='both', setFlags=True)
-    fig, ax, handles = pltu.plot_energy_level(orbitalList, fig = fig, ax = ax, interactive=True, xlevel=2)
+    fig, ax, handles = pltu.plot_energy_level(orbitalList, fig = fig, ax = ax, xlabel='La Basis Func', interactive=True, xlevel=1)
+    
+    orbitalList = p.get_orbitals( basisSpecies = 'S', spin='both', asList = True)
+    fig, ax,handlesSpin= pltu.plot_energy_level(orbitalList, fig = fig, ax = ax, xlabel='S Basis Func', interactive=False, xlevel=2)
+    orbitalList = p.get_orbitals( basisSpecies = 'O', spin='both', asList = True)
+    fig, ax,handlesSpin= pltu.plot_energy_level(orbitalList, fig = fig, ax = ax, xlabel='O, Basis Func', interactive=False, xlevel=3)
+    
+    orbitalList = p.get_orbitals( basisSpecies = 'P', spin='both', asList = True)
+    fig, ax,handlesSpin= pltu.plot_energy_level(orbitalList, fig = fig, ax = ax, xlabel='P Basis Func', interactive=False, xlevel=4)
     
 
     #print(p.atom_species)
@@ -51,7 +59,7 @@ for p in parserList:
     #    ax.plot([0,1], [orbital.E, orbital.E], color=color, label=label, zorder=1)
     #ax.plot([0,1], [LUMO.E, LUMO.E], color='tab:pink', label='LUMO',  linestyle='--', zorder=2)
     #ax.plot([0,1], [HOMO.E, HOMO.E], color='tab:cyan', label='HOMO',  linestyle = '--', zorder=2)
-print(handles)
+#print(handles)
 ax.legend(handles=handles)
 #plt.show()
 mpld3.show()

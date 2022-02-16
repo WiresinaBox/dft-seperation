@@ -269,7 +269,7 @@ class nwchem_parser():
         HOMO = None
         LUMO = None
         for O in orbitalList:
-            print(O, O.occ)
+            #print(O, O.occ)
             if (isinstance(HOMO, type(None)) or HOMO.E < O.E ) and O.occ == 1: HOMO = O 
             if (isinstance(LUMO, type(None)) or LUMO.E > O.E ) and O.occ == 0: LUMO = O 
         if setFlags:

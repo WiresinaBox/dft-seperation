@@ -7,7 +7,88 @@ import nwchem_parse as nwparse
 import time
 
 
+figDict = dict()
 
+class replace_ticks(plugins.PluginBase):
+    """So apparently mpld3 doesn't replace tick labels?? A minor detail but like. I wanna do it anyways"""
+    JAVASCRIPT="""
+    //Register and set up the empty plugin
+    mpld3.register_plugin("tickmarks", TickMarkPlugin);
+    TickMarkPlugin.prototype = Object.create(mpld3.Plugin.prototype);
+    TickMarkPlugin.prototype.constructor = TickMarkPlugin;
+    TickMarkPlugin.prototype.requiredProps = ["xticks", "yticks"]; //arguements pulled from the python side.
+    TickMarkPlugin.prototype.defaultProps = {} //keyword arguements
+  
+    //Constructor
+    function TickMarkPlugin(fig, props){
+        mpld3.Plugin.call(this, fig, props);
+    }
+
+    TickMarkPlugin.prototype.draw = function() {
+        var obvconfig = {attributes: true, childList: true, subtree: true}
+        var props = this.props
+        var yaxis = d3.select(".mpld3-yaxis")
+        var xaxis = d3.select(".mpld3-xaxis")
+        updateAxis(props, xaxis, yaxis);
+        //listen in for any changes to the axis and then reverse the changes
+        var obv = new MutationObserver(function() {
+                                                updateAxis(props, xaxis, yaxis);
+                                                    })
+        obv.observe(xaxis.node(), obvconfig);
+        obv.observe(yaxis.node(), obvconfig);
+
+
+    
+    function updateAxis(props, xaxis, yaxis) {
+        var yaxisticks = yaxis.selectAll(".tick").selectAll('tspan').nodes()
+        var xaxisticks = xaxis.selectAll(".tick").selectAll('tspan').nodes()
+        for (var j = 0; j < props.xticks.length; j++) {
+            for (var i = 0; i < xaxisticks.length; i++) {
+                var tick = xaxisticks[i]
+                if (props.xticks[j][0] === tick.innerHTML) {
+                    tick.innerHTML = props.xticks[j][1] 
+                }
+            }
+        }
+        
+        for (var j = 0; j < props.yticks.length; j++) {
+            for (var i = 0; i < yayisticks.length; i++) {
+                var tick = yayisticks[i]
+                if (props.yticks[j][0] === tick.innerHTML) {
+                    tick.innerHTML = props.yticks[j][1] 
+                }
+            }
+        }
+
+    }
+    }
+
+    """
+
+    def __init__(self, fig, ax, xticks = [], xticklabels = [], yticks = [], yticklabels = [], roundTicks=True):
+        self._fig = fig
+        self._ax = ax
+        self._xticks = [str(val) for val in xticks]
+        self._xticklabels =[str(val) for val in  xticklabels]
+        self._yticks =[str(val) for val in  yticks]
+        self._yticklabels =[str(val) for val in  yticklabels]
+        if roundTicks:
+            #This is a horrible abuse of type conversions I'm so sorry.
+            self._xticks.extend([str(int(np.ceil(float(val)))) for val in self._xticks])
+            self._yticks.extend([str(int(np.ceil(float(val)))) for val in self._yticks])
+            self._xticklabels.extend(self._xticklabels)
+            self._yticklabels.extend(self._yticklabels)
+        self.dict_=dict()
+        
+        self._setup()
+
+    def _setup(self):
+        self.dict_ = {
+                'type': 'tickmarks',
+                'xticks' : list(zip(self._xticks, self._xticklabels)), 
+                'yticks' : list(zip(self._yticks, self._yticklabels)) 
+                }
+        print(self.dict_)
 
 class energy_level_ievents(plugins.PluginBase):
     """Holds all the references for energy levels and stuff for use with the interaction portion"""
@@ -21,7 +102,7 @@ class energy_level_ievents(plugins.PluginBase):
     mpld3.register_plugin("energylevels", EnergyLevelsPlugin);
     EnergyLevelsPlugin.prototype = Object.create(mpld3.Plugin.prototype);
     EnergyLevelsPlugin.prototype.constructor = EnergyLevelsPlugin;
-    EnergyLevelsPlugin.prototype.requiredProps = ["ids", "data"]; //arguements pulled from the python side.
+    EnergyLevelsPlugin.prototype.requiredProps = ["ids", "data", "infolabels"]; //arguements pulled from the python side.
     EnergyLevelsPlugin.prototype.defaultProps = {} //keyword arguements
   
     //Constructor
@@ -37,51 +118,41 @@ class energy_level_ievents(plugins.PluginBase):
        
         //create extra HTML objects using d3
         
+        var figdiv = d3.select("body").select('div')
+                                        .attr("class", "plotdiv")
 
-        infodiv = d3.select("body")
-                    .append("div")
-                        .attr("class", "infodiv")
-                        .attr("name", "orbitalinfo")
-                        .style("height", 200)
-                        .style("width", "100%")
-        infodiv.append("h1")
-            .attr("class", "infoheading")
-            .text('Orbital Information')
-        infodiv.append("p")
-            .attr("class", "infolabel")
-            .text('Vector:')
-        infodiv.append("p")
-            .attr("class", "infotext")
-            .attr("id", "vector")
-        infodiv.append("p")
-            .attr("class", "infolabel")
-            .text('Spin:')
-        infodiv.append("p")
-            .attr("class", "infotext")
-            .attr("id", "spin")
-        infodiv.append("p")
-            .attr("class", "infolabel")
-            .text('Occupancy:')
-        infodiv.append("p")
-            .attr("class", "infotext")
-            .attr("id", "occ")
-        infodiv.append("p")
-            .attr("class", "infolabel")
-            .text('E')
-        infodiv.append("p")
-            .attr("class", "infotext")
-            .attr("id", "E")
-            .text('E')
+        var eleveldiv = d3.select("body").append('div', 'b')
+                                        .attr("class", "figContainer")
+       
+        //use .node() to get the actual html element
+        eleveldiv.node().appendChild(figdiv.node())
         
-        infodiv.append("h1")
-            .attr("class", "infoheading")
-            .text('Orbital Position')
-        infodiv.append("p")
-            .attr("class", "infolabel")
-            .text('Basis Function Atoms:')
-        infodiv.append("p")
-            .attr("class", "infotext")
-            .attr("id", "basisatoms")
+        var infodiv = eleveldiv
+                        .append("div")
+                            .attr("class", "infodiv")
+                            .attr("name", "orbitalinfo")
+                            .style("height", 200)
+                            .style("width", "100%")
+        
+        for (var i = 0; i < this.props.infolabels.length; i++) {
+            var labelinfo = this.props.infolabels[i];
+            if ( labelinfo.key === 'heading') {
+                infodiv.append("h1")
+                    .attr("class", "infoheading")
+                    .text(labelinfo.text) 
+
+            } else {
+                infoline = infodiv.append('div')
+                    .attr("class", "infoline")
+                infoline.append("p")
+                    .attr("class", "infolabel")
+                    .text(labelinfo.text+': ')
+                infoline.append("p")
+                    .attr("class", "infotext")
+                    .attr("id", labelinfo.key)
+            }
+        }
+
         
                 
         textE = d3.select("#E")
@@ -89,6 +160,9 @@ class energy_level_ievents(plugins.PluginBase):
         textvector = d3.select("#vector")
         textspin = d3.select("#spin")
         textbasisatoms = d3.select("#basisatoms")
+        textcenter = d3.select("#center")
+        textr2 = d3.select("#r2")
+        textbasisfuncs = d3.select("#basisfuncs")
 
 
         var objList = []
@@ -120,6 +194,26 @@ class energy_level_ievents(plugins.PluginBase):
 
     """
 
+    css_="""
+    .figContainer{
+        display:grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr;
+    }
+
+
+    .infolabel {
+        display:inline;
+    }
+    .infotext {
+        display:inline;
+    }
+    """
+
+
+    def append_infolabel(self, key, text):
+        self.infolabels.append({'key':key, 'text':text})
+
     def __init__(self, fig, ax):
         self._fig = fig
         self._ax = ax
@@ -127,7 +221,29 @@ class energy_level_ievents(plugins.PluginBase):
         self._refreshcalls = 0
         #Javascript stuff.
         self.dict_ = dict()
-
+        
+        self.infolabels=[]
+        
+        self.append_infolabel('heading', 'Properties')
+        
+        self.append_infolabel('E','Energy')
+        self.append_infolabel('occ','Occupancy')
+        self.append_infolabel('spin', 'Spin')
+        
+        self.append_infolabel('heading', 'Location')
+        
+        self.append_infolabel('basisatoms','Basis Atoms')
+        self.append_infolabel('center','Center')
+        self.append_infolabel('r2', 'R^2')
+        
+        self.append_infolabel('heading', 'Basis Functions')
+        self.append_infolabel('vector','DFT Vector')
+        self.append_infolabel('basisfuncs','Basis Funcions')
+        
+        #self.append_infolabel('ms', 'ms')
+        #self.append_infolabel('isHOMO', 'HOMO:')
+        #self.append_infolabel('isLUMO', 'LUMO:')
+                
     def add_artist(self, artist, orbital):
         """Appends things like Line2D and what not"""
         if isinstance(artist, list):
@@ -152,6 +268,7 @@ class energy_level_ievents(plugins.PluginBase):
         self.dict_["type"] ="energylevels"
         self.dict_["ids"] = artists 
         self.dict_["data"] = orbitalDat
+        self.dict_["infolabels"] = self.infolabels 
 
     def connect_tooltip_plugin(self, fig = 'self'):
         if fig == 'self': fig = self._fig
@@ -160,7 +277,7 @@ class energy_level_ievents(plugins.PluginBase):
         print('Connecting')
         for artist, orbital in self._artistsDict.items():
             tooltip = plugins.LineLabelTooltip(artist, label = 'E:{}, occ:{}'.format(orbital.E, orbital.occ))
-            print(artist, tooltip)
+            #print(artist, tooltip)
             plugins.connect(fig, tooltip)
         #tooltip = plugins.LineLabelTooltip(artists, label=orbitalDat)
 
@@ -188,7 +305,7 @@ class energy_level_ievents(plugins.PluginBase):
 
     
 
-def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0,
+def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0, xlabel=None,
         conditions = [
             [{'occ':1}, {'label':'filled', 'color':'tab:blue', 'zorder':1}], 
             [{'occ':0}, {'label':'unfilled', 'color':'tab:red', 'zorder':1}],
@@ -202,6 +319,10 @@ def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0,
 
     if isinstance(ax, type(None)):
         fig, ax = plt.subplots(1,1)
+    if not ax.lines: #If the axis is freshly created, nuke the xlabels
+        print('hi')
+        ax.set_xticks([])
+        ax.set_xticklabels([])
     #worstcase scenario: line length is whole plot width. 72 ppi
     ttmarkersize = 5
     xpointsN = int(fig.get_figwidth()*72/ttmarkersize)
@@ -212,8 +333,24 @@ def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0,
     else:
         xlo = xlevel
         xhi = xlo + 1
+    xtick = (xhi + xlo)/2
+    
+    xticks = list(ax.get_xticks())
+    xlabels = [text.get_text() for text in ax.get_xticklabels()]
+    if not isinstance(xlabel, type(None)):
+        xticks.append(xtick)
+        xlabels.append(xlabel)
+        print(xlabels, xticks) 
+        ax.set_xticks(xticks)
+        ax.set_xticklabels(xlabels)
 
-    eventHandler = energy_level_ievents(fig, ax)
+    if utils.get_id(fig) not in figDict.keys():
+        eventHandler = energy_level_ievents(fig, ax)
+        figDict[utils.get_id(fig)] = eventHandler
+        doPluginConnect = True
+    else:
+        eventHandler = figDict[utils.get_id(fig)]
+        doPluginConnect = False
     handles = dict()
 
 
@@ -265,9 +402,12 @@ def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0,
         if curstyleid not in handles:
             handles[curstyleid] = A[0]
 
-    if interactive:
-        eventHandler.setup_data()
+    
+    eventHandler.setup_data()
+    if doPluginConnect: 
         plugins.connect(fig, eventHandler)
+    rticks = replace_ticks(fig, ax, xticks = xticks, xticklabels = xlabels)
+    plugins.connect(fig, rticks)
     
     #pickwrapper = lambda event : eventHandler.orbital_pick_info(event) #Dunno why this is needed but doesn't work without it 
     #refreshwrapper = lambda event : eventHandler.refresh(event) #Dunno why this is needed but doesn't work without it 
