@@ -5,13 +5,6 @@ import re
 
 class nw_orbital():
     """Contains information for each alpha/beta orbital"""
-    _E = None #Energy
-    _occ = None #occupancy
-    _vector = None #Which basis set expansion vector.
-    _basisfuncs = list() #list of tuples (bfn, coeff, atom, function)
-    _center = None #tuple
-    _r2 = None 
-    _spin = None #alpha or beta 
     @property
     def E(self): return self._E
     @E.setter
@@ -65,7 +58,7 @@ class nw_orbital():
         return {'E':self._E,
                 'occ':self._occ,
                 'vector':self._vector,
-                #'basisatoms':self._basisatoms,
+                'basisatoms':['({}:{})'.format(atom.id, atom.species) for atom in self._basisatoms],
                 #'basisfuncs':self._basisfuncs,
                 'center':self._center,
                 'r2':self._r2,

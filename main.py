@@ -19,14 +19,16 @@ for fn in fnList:
     p = nwparse.nwchem_parser(fn)
     parserList.append(p)
     
-fig, ax = plt.subplots(1,1, figsize=(10,10))
+fig, ax = plt.subplots(1,1)#figsize=(10,10))
 for p in parserList:
     #print(p.get_orbital_dict())
+    
+    orbitalListFull = p.get_orbitals( basisSpecies = None, spin='both', asList = True)
+    fig, ax,handlesFull  = pltu.plot_energy_level(orbitalListFull, fig = fig, ax = ax, interactive=False) #overwriteStyle={'zorder':0, 'alpha':0.05})
+    
     orbitalList = p.get_orbitals( basisSpecies = 'La', spin='both', asList = True)
     HOMO, LUMO = p.get_HOMO_LUMO(basisSpecies = 'La', spin='both', setFlags=True)
-    fig, ax, handles = pltu.plot_energy_level(orbitalList, fig = fig, ax = ax, interactive=True)
-    orbitalListFull = p.get_orbitals( basisSpecies = None, spin='both', asList = True)
-    fig, ax,handlesFull  = pltu.plot_energy_level(orbitalListFull, fig = fig, ax = ax, interactive=False, overwriteStyle={'zorder':0, 'alpha':0.05})
+    fig, ax, handles = pltu.plot_energy_level(orbitalList, fig = fig, ax = ax, interactive=True, xlevel=2)
     
 
     #print(p.atom_species)
@@ -51,4 +53,5 @@ for p in parserList:
     #ax.plot([0,1], [HOMO.E, HOMO.E], color='tab:cyan', label='HOMO',  linestyle = '--', zorder=2)
 print(handles)
 ax.legend(handles=handles)
+#plt.show()
 mpld3.show()

@@ -44,19 +44,51 @@ class energy_level_ievents(plugins.PluginBase):
                         .attr("name", "orbitalinfo")
                         .style("height", 200)
                         .style("width", "100%")
+        infodiv.append("h1")
+            .attr("class", "infoheading")
+            .text('Orbital Information')
+        infodiv.append("p")
+            .attr("class", "infolabel")
+            .text('Vector:')
+        infodiv.append("p")
+            .attr("class", "infotext")
+            .attr("id", "vector")
+        infodiv.append("p")
+            .attr("class", "infolabel")
+            .text('Spin:')
+        infodiv.append("p")
+            .attr("class", "infotext")
+            .attr("id", "spin")
+        infodiv.append("p")
+            .attr("class", "infolabel")
+            .text('Occupancy:')
         infodiv.append("p")
             .attr("class", "infotext")
             .attr("id", "occ")
-            .text('occ')
+        infodiv.append("p")
+            .attr("class", "infolabel")
+            .text('E')
         infodiv.append("p")
             .attr("class", "infotext")
             .attr("id", "E")
             .text('E')
-                
-
-        textE = d3.select("#E")
         
+        infodiv.append("h1")
+            .attr("class", "infoheading")
+            .text('Orbital Position')
+        infodiv.append("p")
+            .attr("class", "infolabel")
+            .text('Basis Function Atoms:')
+        infodiv.append("p")
+            .attr("class", "infotext")
+            .attr("id", "basisatoms")
+        
+                
+        textE = d3.select("#E")
         textocc = d3.select("#occ")
+        textvector = d3.select("#vector")
+        textspin = d3.select("#spin")
+        textbasisatoms = d3.select("#basisatoms")
 
 
         var objList = []
@@ -77,6 +109,9 @@ class energy_level_ievents(plugins.PluginBase):
             console.log(d);
             textE.text(d.E);
             textocc.text(d.occ);
+            textvector.text(d.vector);
+            textspin.text(d.spin);
+            textbasisatoms.text(d.basisatoms);
 
         }
         
@@ -153,7 +188,7 @@ class energy_level_ievents(plugins.PluginBase):
 
     
 
-def plot_energy_level(orbitals, fig = None, ax = None, legend=False,
+def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0,
         conditions = [
             [{'occ':1}, {'label':'filled', 'color':'tab:blue', 'zorder':1}], 
             [{'occ':0}, {'label':'unfilled', 'color':'tab:red', 'zorder':1}],
@@ -171,6 +206,13 @@ def plot_energy_level(orbitals, fig = None, ax = None, legend=False,
     ttmarkersize = 5
     xpointsN = int(fig.get_figwidth()*72/ttmarkersize)
    
+    if isinstance(xlevel, (list, tuple, np.ndarray)):
+        xlo = xlevel[0]
+        xhi = xlevel[1]
+    else:
+        xlo = xlevel
+        xhi = xlo + 1
+
     eventHandler = energy_level_ievents(fig, ax)
     handles = dict()
 
@@ -201,7 +243,7 @@ def plot_energy_level(orbitals, fig = None, ax = None, legend=False,
         #    infolabel += ':{}'.format(plotlabel)
         #    curstyle.pop('label') #Remove label cause we're going to use it to store information.
         curstyle.update(overwriteStyle) 
-        A = ax.plot(np.linspace(0,1,xpointsN), [orbital.E for i in range(xpointsN)],  **curstyle)
+        A = ax.plot(np.linspace(xlo,xhi,xpointsN), [orbital.E for i in range(xpointsN)],  **curstyle)
 
         if interactive:
             #A[0].set_picker(), 
