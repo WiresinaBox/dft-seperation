@@ -1,4 +1,5 @@
 import numpy as np
+import scipy as sp
 import matplotlib
 import matplotlib.pyplot as plt
 import mpld3
@@ -6,6 +7,7 @@ from mpld3 import plugins, utils
 import nwchem_parse as nwparse
 import time
 
+dist = lambda p1, p2: np.sqrt((p1-p2)**2)
 
 figDict = dict()
 
@@ -102,12 +104,16 @@ class energy_level_ievents(plugins.PluginBase):
     mpld3.register_plugin("energylevels", EnergyLevelsPlugin);
     EnergyLevelsPlugin.prototype = Object.create(mpld3.Plugin.prototype);
     EnergyLevelsPlugin.prototype.constructor = EnergyLevelsPlugin;
-    EnergyLevelsPlugin.prototype.requiredProps = ["ids", "data", "infolabels"]; //arguements pulled from the python side.
+    EnergyLevelsPlugin.prototype.requiredProps = ["spinMarkers", "selectMarkers", "levelLines", "data", "infolabels"]; //arguements pulled from the python side.
     EnergyLevelsPlugin.prototype.defaultProps = {} //keyword arguements
-  
+
     //Constructor
     function EnergyLevelsPlugin(fig, props){
         mpld3.Plugin.call(this, fig, props);
+
+        //add figure specific css
+        mpld3.insert_css('#' + fig.figid + " path.hover ",
+                        {"stroke-width": "3.0"});
     }
 
 
@@ -117,8 +123,8 @@ class energy_level_ievents(plugins.PluginBase):
         //this.props.VARIABLE_NAME
        
         //create extra HTML objects using d3
-        
-        var figdiv = d3.select("body").select('div')
+       
+        var figdiv = d3.select('#'+this.fig.figid)
                                         .attr("class", "plotdiv")
 
         var eleveldiv = d3.select("body").append('div', 'b')
@@ -166,21 +172,34 @@ class energy_level_ievents(plugins.PluginBase):
 
 
         var objList = []
-        for (var i=0; i < this.props.ids.length; i++) {
-
-            var obj = mpld3.get_element(this.props.ids[i], this.fig);
-            // get_element might return null if the id is a Line2D for some reason. 
+        for (var i=0; i < this.props.levelLines.length; i++) {
+            
+            var lineObj = mpld3.get_element(this.props.levelLines[i], this.fig);
+            var ghostObj = mpld3.get_element(this.props.selectMarkers[i], this.fig);
+            var spinsObj = mpld3.get_element(this.props.spinMarkers[i], this.fig);
             var data = this.props.data[i];
-            obj.elements()
+            
+            var a = this.props.levelLines[i]
+            // get_element might return null if the id is a Line2D for some reason. 
+            data.lineObj = lineObj 
+            data.spinsObj = spinsObj 
+            ghostObj.elements()
                 .datum(data)
                 .on("mouseover", function(d,j) {
+                                    d.lineObj.elements()
+                                        .style("stroke-width", 10);
+                                    changeText(d, j);
+                                })
+                .on("mouseout", function(d,j) {
+                                    d.lineObj.elements()
+                                        .style("stroke-width", d.markersize);
                                     changeText(d, j);
                                 })
         }
         
         //d is the datum, specifies points and stuff. i is the index within d of the point just touched.
         function changeText(d, i){
-            console.log(d);
+            //console.log(d);
             textE.text(d.E);
             textocc.text(d.occ);
             textvector.text(d.vector);
@@ -243,8 +262,60 @@ class energy_level_ievents(plugins.PluginBase):
         #self.append_infolabel('ms', 'ms')
         #self.append_infolabel('isHOMO', 'HOMO:')
         #self.append_infolabel('isLUMO', 'LUMO:')
-                
-    def add_artist(self, artist, orbital):
+
+#Write this up to interpolate arbitrary lines
+#    def _gen_ghost_markers(line2D,pointMult = 3, marker = 'o', markersize=5,visible=False):
+#        xy = line2D.get_xydata()
+#        segLens = [dist(xy[i,:], xy[i+1, :]) for i in range(xy.shape[0]-1)]
+#        totDist = sum(segLens)
+#        totDist = sum(segLens)
+#        N = int(xy.shape[0]*pointMult) #How many more interpolated points there will be.
+#        step = N/segLens #dist between points
+#        
+#        newX=np.zeros(N)
+#        newY=np.zeros(N)
+#        lastNewPointDist = 0
+#        lastPointDist = 0
+#
+#        for i in range(xy.shape[0]):
+#            s = 
+#            
+    
+    def _plot_ghost_markers(self,line2D, marker = '.', markersize=1,visible=False):
+        #Currently assumes flat line
+        x = line2D.get_xdata()
+        y = line2D.get_ydata()
+        
+        xlo, xhi = self._ax.get_xlim()
+        
+        xpointsN = int(self._fig.get_figwidth()*(np.abs(x[0]-x[-1]) / np.abs(xlo-xhi))*72/markersize)
+        newx = np.linspace(x[0], x[-1], xpointsN)
+        newy = np.zeros(newx.size) + y[0]
+        ghostScatter = self._ax.scatter(newx, newy, marker=marker, s=markersize) 
+       
+        if not visible: 
+            ghostScatter.set_edgecolor((1,1,1,0))
+            ghostScatter.set_facecolor((1,1,1,0))
+        return ghostScatter
+            
+    def _plot_spin_markers(self,line2D, orbital, offset=0.1,markersize=5):
+        x = line2D.get_xdata()
+        xlo = x[0]
+        xhi = x[-1]
+        xtick = (xlo + xhi)/2
+        if orbital.occ > 0:
+            if orbital.spin == 0.5:
+                A = self._ax.scatter([xtick-offset], [orbital.E], marker = '$↑$', s = markersize, c=line2D.get_color())
+
+            elif orbital.spin == -0.5:
+                A = self._ax.scatter([xtick+offset], [orbital.E], marker = '$↓$', s = markersize, c=line2D.get_color())
+            else:
+                A = self._ax.scatter([xtick], [orbital.E], marker = 'o', s = markersize, c=line2D.get_color())
+        else:
+                A = self._ax.scatter([xtick], [orbital.E], s = 0 )
+        return A
+
+    def add_artist(self, artist, orbital, **kwargs):
         """Appends things like Line2D and what not"""
         if isinstance(artist, list):
             for a in artist:
@@ -252,23 +323,37 @@ class energy_level_ievents(plugins.PluginBase):
         else:
             self._artistsDict[artist] = orbital
    
-    def setup_data(self):
+    def setup_data(self, spinMarkerSize=5, visibleGhosts=False):
         """This sets up all the data and element ids for usage in the javascript protion"""
         items = self._artistsDict.items()
         artists = []
         orbitalDat = []
+        
+        self.dict_["type"] ="energylevels"
+        self.dict_["infolabels"] = self.infolabels 
+        
+        self.dict_["levelLines"] = []
+        self.dict_["selectMarkers"] = []
+        self.dict_["spinMarkers"] = [] 
+        self.dict_["data"] = [] 
+        
         for tup in items:
-            a, dat = tup
+            a, orb = tup
+            ghost = self._plot_ghost_markers(a, visible = visibleGhosts)
+            spins = self._plot_spin_markers(a, orb, markersize=spinMarkerSize)
             if isinstance(a, matplotlib.lines.Line2D): suffix = 'pts'
             else: suffix = None
-            artists.append(utils.get_id(a, suffix))
-            orbitalDat.append(dat.get_data())
+            suffix=None
+            self.dict_['spinMarkers'].append(utils.get_id(spins))
+            self.dict_['selectMarkers'].append(utils.get_id(ghost))
+            self.dict_['levelLines'].append(utils.get_id(a, suffix))
+            dat = orb.get_data()
+            dat.update({'linewidth':a.get_linewidth(),
+                        'linecolor':a.get_color(),
+                        })
+            self.dict_['data'].append(dat)
+        print(self.dict_['levelLines'])
 
-
-        self.dict_["type"] ="energylevels"
-        self.dict_["ids"] = artists 
-        self.dict_["data"] = orbitalDat
-        self.dict_["infolabels"] = self.infolabels 
 
     def connect_tooltip_plugin(self, fig = 'self'):
         if fig == 'self': fig = self._fig
@@ -325,7 +410,8 @@ def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0, x
         ax.set_xticklabels([])
     #worstcase scenario: line length is whole plot width. 72 ppi
     ttmarkersize = 5
-    xpointsN = int(fig.get_figwidth()*72/ttmarkersize)
+    #xpointsN = int(fig.get_figwidth()*72/ttmarkersize)
+    xpointsN = 2 
    
     if isinstance(xlevel, (list, tuple, np.ndarray)):
         xlo = xlevel[0]
@@ -344,6 +430,7 @@ def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0, x
         ax.set_xticks(xticks)
         ax.set_xticklabels(xlabels)
 
+    #To avoid duplication
     if utils.get_id(fig) not in figDict.keys():
         eventHandler = energy_level_ievents(fig, ax)
         figDict[utils.get_id(fig)] = eventHandler
@@ -380,15 +467,33 @@ def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0, x
         #    infolabel += ':{}'.format(plotlabel)
         #    curstyle.pop('label') #Remove label cause we're going to use it to store information.
         curstyle.update(overwriteStyle) 
-        A = ax.plot(np.linspace(xlo,xhi,xpointsN), [orbital.E for i in range(xpointsN)],  **curstyle)
+        A = ax.plot([xlo,xhi], [orbital.E, orbital.E],  **curstyle)
+        #A = ax.plot(np.linspace(xlo,xhi,xpointsN), [orbital.E for i in range(xpointsN)],  **curstyle)
+        #if orbital.spin == 0.5:
+        #    A = ax.plot([xlo,xtick-0.1,xhi], [orbital.E for i in range(3)],  **curstyle)
+        #    A[0].set_markersize(ttmarkersize) 
+        #    A[0].set_marker('$↑$')
+
+        #elif orbital.spin == -0.5:
+        #    A = ax.plot([xlo,xtick+0.1,xhi], [orbital.E for i in range(3)],  **curstyle)
+        #    A[0].set_markersize(ttmarkersize) 
+        #    A[0].set_marker('$↓$')
+        #else:
+        #    A = ax.plot([xlo,xtick,xhi], [orbital.E for i in range(3)],  **curstyle)
+        #    A[0].set_markersize(ttmarkersize) 
+        #    A[0].set_marker('o')
+            
+
+
+        
 
         if interactive:
             #A[0].set_picker(), 
             #A[0].set_pickradius(2)
-            A[0].set_markersize(ttmarkersize) 
-            A[0].set_marker('s')
-            A[0].set_markerfacecolor((1,1,1,0))
-            A[0].set_markeredgecolor((1,1,1,0))
+            #A[0].set_markersize(ttmarkersize) 
+            #A[0].set_marker('s')
+            #A[0].set_markerfacecolor((1,1,1,0))
+            #A[0].set_markeredgecolor((1,1,1,0))
             eventHandler.add_artist(A, orbital)
         
         atomlabel = ''
@@ -402,8 +507,8 @@ def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0, x
         if curstyleid not in handles:
             handles[curstyleid] = A[0]
 
-    
-    eventHandler.setup_data()
+    if interactive:
+        eventHandler.setup_data(visibleGhosts=False)
     if doPluginConnect: 
         plugins.connect(fig, eventHandler)
     rticks = replace_ticks(fig, ax, xticks = xticks, xticklabels = xlabels)
