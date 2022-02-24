@@ -6,6 +6,7 @@ import nwchem_parse as nwparse
 import plotutil as pltu
 import mpld3
 from mpld3 import plugins, utils
+import figure_site as site
 #A space for scratchwork for calling other modules
 
 parser = argparse.ArgumentParser()
@@ -20,6 +21,7 @@ for fn in fnList:
     parserList.append(p)
     
 fig, ax = plt.subplots(1,1, figsize=(6,7), tight_layout=True)
+Site = site.sitePage()
 for p in parserList:
     #print(p.get_orbital_dict())
     
@@ -62,4 +64,12 @@ for p in parserList:
 #print(handles)
 ax.legend(handles=handles)
 #plt.show()
-mpld3.show()
+#mpld3.show()
+Site.add_parser(1, p)
+Site.add_parser(2, p)
+Site.add_parser(3, p)
+Site.add_figure(1, fig)
+Site.add_figure(2, fig)
+Site.add_figure(3, fig)
+Site.setup_HTML()
+site.run(Site)

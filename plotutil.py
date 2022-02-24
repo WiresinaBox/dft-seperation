@@ -525,3 +525,5 @@ def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0, x
         ax.legend(handles=list(handles.values()))
    
     return fig, ax, list(handles.values())
+
+
