@@ -3,6 +3,9 @@ import sys
 import numpy as np
 import re
 
+
+distL2 = lambda u, v: np.sqrt(np.sum((np.array(u) - np.array(v))**2))
+
 class nw_orbital():
     """Contains information for each alpha/beta orbital"""
     @property
@@ -23,6 +26,7 @@ class nw_orbital():
     def basisfuncs(self, val): self._basisfuncs = val
     def add_basisfunc(self, bfn, coeff, atom, orbital):
         self._basisatoms.add(atom)
+        atom.add_orbital(self)
         self._basisfuncs.append((bfn, coeff, atom, orbital))
     
     @property
@@ -92,12 +96,6 @@ class nw_orbital():
         return 'orbital({}, {})'.format(self._vector, self._spin)
 class nw_atom():
     """Contains all the information for atom specific information. Species, Iterations, Orbital information etc."""
-    _id = None
-    _species = None
-    _charge = None
-    _shell_charges = None
-    _coordinates = None
-    _gradient_forces = None
 
     @property
     def species(self): return self._species
@@ -125,6 +123,64 @@ class nw_atom():
     def gradient_forces(self): return self._gradient_forces
     @gradient_forces.setter
     def gradient_forces(self, val): self._gradient_forces = val
+    @property
+    def orbitals_dict(self): return self._orbitals_dict
+    @orbitals_dict.setter
+    def orbitals_dict(self, val): self._orbitals_dict = val
+    @property
+    def neighbors(self): return self._neighbors
+    @neighbors.setter
+    def neighbors(self, val): self._neighbors = val
+    @property
+    def distance_dict(self): return self._distance_dict
+    @distance_dict.setter
+    def distance_dict(self, val): self._distance_dict = val
+    @property
+    def coordination(self): return len(self._neighbors) 
+
+    
+
+    def add_orbital(self, O):
+        self._orbitals_dict[(O.vector, O.spin)] = O
+        self._neighbors.update({atom for atom in O.basisatoms if atom != self})
+    
+    def get_neighbors_by_dist(self, rmax = np.inf, id=None, species = None, rmin = 0, includeSelf=False):
+        idList = []
+        speciesList = []
+        returnList = []
+        if isinstance(id, (list, tuple)): idList.extend(id)
+        elif not isinstance(id, type(None)): idList.append(id)
+        if isinstance(species, (list, tuple)): speciesList.extend(species)
+        elif not isinstance(species, type(None)): speciesList.append(species)
+        for aid, tup in self._distance_dict.items(): 
+            a = tup['atom']
+            dist = tup['dist']
+            if len(idList) > 0 and a.id in idList:
+                idpass = True 
+            elif len(idList) == 0: 
+                idpass = True
+            else:
+                idpass = False
+            if not includeSelf and a.id == self._id:
+                idpass = False
+
+            if len(speciesList) > 0 and a.species in speciesList:
+                speciespass = True 
+            elif len(speciesList) == 0: 
+                speciespass = True
+            else:
+                speciespass = False
+
+            if rmin <= dist <= rmax:
+                distpass = True
+            else:
+                distpass = False
+
+            if idpass and speciespass and distpass:
+                returnList.append(a)
+                print(a, dist)
+        if len(returnList) == 1 and not asList: return returnList[0]
+        else: return returnList
 
     def __init__(self, id=None, species=None, charge=None, shell_charges=None, coordinates=None, gradient_forces=None):
         self._id = id
@@ -133,6 +189,10 @@ class nw_atom():
         self._shell_charges = shell_charges
         self._coordinates = coordinates
         self._gradient_forces = gradient_forces
+
+        self._orbitals_dict = dict() 
+        self._neighbors = set() #Atoms which share an orbital I think?
+        self._distance_dict = dict() #Distance to every other atom
 
     def __repr__(self):
         return 'atom({},{})'.format(self._id, self._species)
@@ -214,27 +274,37 @@ class nwchem_parser():
         DFT Energy Gradients
         Energy per Step
     """
-    _runinfo = dict()
-    _atom_dict = dict()    
-    _orbital_dict_alpha = dict()
-    _orbital_dict_beta = dict()
-    _energies = dict()
-    _total_density = dict()
-    _spin_density = dict()
-    _gradient_dict = dict()
+    #_runinfo = dict()
+    #_atom_dict = dict()    
+    #_orbital_dict_alpha = dict()
+    #_orbital_dict_beta = dict()
+    #_energies = dict()
+    #_total_density = dict()
+    #_spin_density = dict()
+    #_gradient_dict = dict()
 
 
     #Getters and Setters
     @property
-    def energies(self): return self._energies
-    @energies.setter
-    def energies(self, val): self._energies = val
+    def nonvar_energies(self): return self._nonvar_energies
+    @nonvar_energies.setter
+    def nonvar_energies(self, val): self._nonvar_energies = val
+    
+    @property
+    def dft_energies(self): return self._dft_energies
+    @dft_energies.setter
+    def dft_energies(self, val): self._dft_energies = val
     
     
     @property
     def atom_dict(self): return self._atom_dict
     @atom_dict.setter
     def atom_dict(self, val): self._atom_dict = val
+    
+    @property
+    def distance_dict(self): return self._distance_dict
+    @distance_dict.setter
+    def distance_dict(self, val): self._distance_dict = val
     
     @property
     def runinfo(self): return self._runinfo
@@ -336,11 +406,30 @@ class nwchem_parser():
                 else: r[key] = o
         return r
 
+    def _set_atom_dist(self):
+        atoms = list(self._atom_dict.values())
+        for i in range(len(atoms)):
+            for j in range(i, len(atoms)):
+                ai = atoms[i]
+                aj = atoms[j]
+                dist = distL2(ai.coordinates, aj.coordinates)
+                if ai.id not in self._distance_dict:
+                    self._distance_dict[ai.id] = {}
+                if aj.id not in self._distance_dict:
+                    self._distance_dict[aj.id] = {}
+                   
+                self._distance_dict[ai.id][aj.id] = dist
+                self._distance_dict[aj.id][ai.id] = dist
+        for i in range(len(atoms)):
+            ai = atoms[i]
+            ai.distance_dict.update({ajid:{'dist':dist, 'atom':self._atom_dict[ajid]} for ajid, dist in self._distance_dict[ai.id].items()})
+
+
     def get_orbital_dict(self):
         a= {(o.vector, o.spin):o for o in self._orbital_dict_alpha.values()}
         a.update({(o.vector, o.spin):o for o in self._orbital_dict_beta.values()})
         return a
-    def get_atoms(self, id = None, species = None, alwaysAsList=False):
+    def get_atoms(self, id = None, species = None, asList=False):
         """Returns a list of atoms given the specified constraints. If none are given then returns all atoms."""
         idList = []
         speciesList = []
@@ -365,10 +454,20 @@ class nwchem_parser():
                 speciespass = False
             if idpass and speciespass:
                 returnList.append(a)
-        if len(returnList) == 1 and not alwaysAsList: return returnList[0]
+        if len(returnList) == 1 and not asList: return returnList[0]
         else: return returnList
     
-    def __init__(self, fn):
+    def __init__(self, fn, verbose=False):
+        self._runinfo = dict()
+        self._atom_dict = dict()    
+        self._orbital_dict_alpha = dict()
+        self._orbital_dict_beta = dict()
+        self._nonvar_energies = dict()
+        self._dft_energies = dict()
+        self._total_density = dict()
+        self._spin_density = dict()
+        self._gradient_dict = dict()
+        self._distance_dict = dict()
         self.fn = fn
         inFile = open(fn, 'r')
         
@@ -429,12 +528,14 @@ class nwchem_parser():
             
             #Checks if the section has changed. If so call the appropriate function.
             if section != prevsection:
-                print(part, module, section)
+                if verbose:
+                    print(part, module, section)
                 if prevsection == 'jobinfo': self._jobinfo_parser(lineBuffer)
                 if prevsection == 'geo' and module == 'opt': self._geo_parser(lineBuffer)
                 if prevsection == 'nonvarinfo': self._nonvarinfo_parser(lineBuffer)
                 if prevsection == 'totden': self._totalDensity_parser(lineBuffer)
                 if prevsection == 'spinden': self._spinDensity_parser(lineBuffer)
+                if prevsection == 'dftenergy': self._dftenergy_parser(lineBuffer)
                 if prevsection == 'moalpha': self._moparser(lineBuffer, 'alpha')
                 if prevsection == 'mobeta': self._moparser(lineBuffer, 'beta')
                 if prevsection == 'dftgrad': self._gradient_parser(lineBuffer)
@@ -465,12 +566,23 @@ class nwchem_parser():
     def _nonvarinfo_parser(self, lines):
         for line in lines[2:-1]:
             dat = line.partition('=')
-            if dat[0].strip() == 'Total energy': self._energies["total"] = float(dat[2])
-            if dat[0].strip() == '1-e energy': self._energies["1e"] = float(dat[2])
-            if dat[0].strip() == '2-e energy': self._energies["2e"] = float(dat[2])
-            if dat[0].strip() == 'HOMO': self._energies["HOMO"] = float(dat[2]) #Highest occupied molecular orbital
-            if dat[0].strip() == 'LUMO': self._energies["LUMO"] = float(dat[2]) #Lowest unoccupied molecular orbital
+            if dat[0].strip() == 'Total energy': self._nonvar_energies["total"] = float(dat[2])
+            if dat[0].strip() == '1-e energy': self._nonvar_energies["1e"] = float(dat[2])
+            if dat[0].strip() == '2-e energy': self._nonvar_energies["2e"] = float(dat[2])
+            if dat[0].strip() == 'HOMO': self._nonvar_energies["HOMO"] = float(dat[2]) #Highest occupied molecular orbital
+            if dat[0].strip() == 'LUMO': self._nonvar_energies["LUMO"] = float(dat[2]) #Lowest unoccupied molecular orbital
 
+    def _dftenergy_parser(self, lines):
+        for line in lines:
+            dat = line.partition('=')
+            if dat[0].strip() == 'Total DFT energy': self._dft_energies["total"] = float(dat[2])
+            if dat[0].strip() == 'One electron energy': self._dft_energies["1e"] = float(dat[2])
+            if dat[0].strip() == 'Coulomb energy': self._dft_energies["coulomb"] = float(dat[2]) #Highest occupied molecular orbital
+            if dat[0].strip() == 'Exchange-Corr. energy': self._dft_energies["exchange-corr"] = float(dat[2])
+            if dat[0].strip() == 'Nuclear repulsion energy': self._dft_energies["nuclear-repulsion"] = float(dat[2]) 
+            if dat[0].strip() == 'Numeric. integr. energy': self._dft_energies["numeric"] = float(dat[2]) 
+            #if dat[0].strip() == 'Total iterative time': self._dft_energies["iteration time"] = float(dat[2]) 
+                
     def _totalDensity_parser(self, lines):
         data = []
         r = lines[0]
@@ -566,14 +678,20 @@ class nwchem_parser():
         j = i + 2
         for line in lines[i+2:]:
             j += 1
-            atom = nw_atom()
             dat = line.split()
             if (len(dat) < 2):
                 break
-            atom.id = dat[0]
-            atom.species = dat[1]
-            atom.coordinates = dat[2:5]
-            atom.gradient_forces = dat[5:]
+            atom = self._atom_dict[int(dat[0])]
+            #atom = nw_atom()
+            #atom.species = dat[1]
+            x = float(dat[2])
+            y = float(dat[3])
+            z = float(dat[4])
+            atom.coordinates = [x,y,z] 
+            gx = float(dat[5])
+            gy = float(dat[6])
+            gz = float(dat[7])
+            atom.gradient_forces = [gx, gy, gz] 
             data.append(atom)
         self._gradient_dict['atoms'] = data
         data = []
@@ -605,11 +723,12 @@ class nwchem_parser():
             l += 1
         self._gradient_dict['Time Info'] = data
         self._gradient_dict['Step Info'] = run
+        self._set_atom_dist()
 
 if __name__ == '__main__':
     fn = sys.argv[1]
     nw = nwchem_parser(fn)
-    print(nw.energies) 
+    print(nw.nonvar_energies) 
     print(nw.runinfo)
     print(nw.get_atoms(id = 5, alwaysAsList=True))
     print(nw.get_orbital_dict())

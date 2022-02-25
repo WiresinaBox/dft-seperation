@@ -19,7 +19,14 @@ parserList = []
 for fn in fnList:
     p = nwparse.nwchem_parser(fn)
     parserList.append(p)
-    
+    print(p.dft_energies)
+    atomList = p.get_atoms(species = 'La', asList = True)
+    for atom in atomList:
+        print(atom.id)
+        print(atom.get_neighbors_by_dist(6, species='O'))
+        
+
+quit()
 fig, ax = plt.subplots(1,1, figsize=(6,7), tight_layout=True)
 Site = site.sitePage()
 for p in parserList:

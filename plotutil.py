@@ -388,7 +388,34 @@ class energy_level_ievents(plugins.PluginBase):
         line.set_color('tab:green')
         print('{}, E : {}, atoms: {} '.format(orbital, orbital.E, orbital.basisatoms))
 
+
+def _get_value(parser, var):
+    if var in ('totalE', 'E'):
+        return parser.energies['total']
+    elif var in ('1-e', '1-e energy'):
+        return parser.energies['1-e energy']
+    elif var in ('2-e', '2-e energy'):
+        return parser.energies['2-e energy']
+    elif var in ('HOMO', 'homo'): 
+        return parser.energies['HOMO']
+    elif var in ('LUMO', 'lumo'): 
+        return parser.energies['LUMO']
     
+
+def plot_total_energies(parsers, yvar='totalE', fig=None, ax = None, **kwargs):
+    """takes in a list of nwchem parsers"""
+    if isinstance(ax, type(None)):
+        fig, ax = plt.subplots(1,1)
+
+    if isinstance(parsers, nwparse.nwchem_parser):
+        parsers = [parsers]
+    xvals = []
+    yvals = []
+    for i, parser in enumerate(parsers):
+        pass 
+
+    
+
 
 def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0, xlabel=None,
         conditions = [
