@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Orbitals Testing</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script type="text/javascript" src="http://d3js.org/d3.v3.min.js"></script>
+    <script type="text/javascript" src="http://mpld3.github.io/js/mpld3.v0.3.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="/static/style.css">
+    
+  </head>
+
+  <body>
+    <!-- Load React. -->
+    <!-- Note: when deploying, replace "development.js" with "production.min.js". -->
+    <script src="https://unpkg.com/react@17/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js" crossorigin></script>
+
+ 
+
+
+    <div class=container>
+      <div class=select>
+        <select name=complex-id id=complex-select><option value="">Select File</option></select>
+        <div id=complexListsDiv class=container>
+          
+
+        </div>
+      </div>
+      <div id=fig01 class=figure></div>
+    </div>
+
+  </body>
+
+
+
+  <script type="text/javascript" src="{{ url_for('static', filename='control.js') }}"></script>
+    
+
+</html>

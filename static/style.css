@@ -1,0 +1,15 @@
+body{
+background-color:#455;
+
+}
+
+.figure{
+  background-color:red;
+  height:100px;
+  width: 100px;
+}
+.select{
+  background-color:blue;
+  height:100px;
+  width: 100px;
+}
