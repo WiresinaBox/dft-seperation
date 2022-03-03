@@ -1,15 +1,45 @@
+
 body{
 background-color:#455;
+height:100vh;
+height:100vw;
+}
 
+#parserDiv{
+  display:flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items:stretch;
+  height:100%;
+  width:100%;
+}
+
+#selectDiv{
+order:1;
+flex-grow:1;
+min-height:5em;
+}
+
+#visualDiv{
+order:2;
+flex-grow:4;
 }
 
 .figure{
   background-color:red;
   height:100px;
-  width: 100px;
+  width: 100vw;
 }
-.select{
+#selectDiv{
   background-color:blue;
   height:100px;
-  width: 100px;
+  width: 100vw;
+}
+
+.divButton{
+  background-color:green;
+  height: 30px;
+  width:100px;
+
+
 }

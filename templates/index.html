@@ -18,22 +18,28 @@
  
 
 
-    <div class=container>
-      <div class=select>
-        <select name=complex-id id=complex-select><option value="">Select File</option></select>
-        <div id=complexListsDiv class=container>
-          
+    <div id=parserDiv class=container>
 
+      <div id=selectDiv class=container>
+        <select name=complex-id id=complex-select><option value="">Select File</option></select>
+        <div id=addComplexButton class=divButton><p>Add</p></div>
+        <div id=removeComplexButton class=divButton><p>Remove</p></div>
+        <div id=complexListsDiv class=container>
         </div>
       </div>
-      <div id=fig01 class=figure></div>
+      
+      <div id=visualDiv class=container>
+        <div id=fig01 class=figure></div>
+
+      </div>
+      
     </div>
 
   </body>
 
 
 
-  <script type="text/javascript" src="{{ url_for('static', filename='control.js') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='control.js') }}"></script>
     
 
 </html>

@@ -1,8 +1,7 @@
-'use strict';
 
-const e = React.createElement;
 
 var complexSelect = document.getElementById('complex-select');
+var complexLists = document.getElementById('complexListsDiv');
 
 //resuable
 function loadComplexNames (data) {
@@ -14,8 +13,6 @@ function loadComplexNames (data) {
 	complexSelect.appendChild(opt);
 	};
     }
-
-
 
 $(document).ready(function() {
 	console.log('Ready!');
@@ -44,3 +41,16 @@ $(document).ready(function() {
 	  });
 	});
 });
+
+
+class complexList extends React.Component{
+	//This gets called when ReactDOM renders it
+	render() {
+		return React.createElement('div', null, '${this.props.name}');
+	}
+}
+
+ReactDOM.render(
+	React.createElement(complexList, {name: 'hi'}, null),
+	document.getElementById('complexListsDiv')
+);
