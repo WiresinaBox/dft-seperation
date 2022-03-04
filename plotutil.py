@@ -389,33 +389,52 @@ class energy_level_ievents(plugins.PluginBase):
         print('{}, E : {}, atoms: {} '.format(orbital, orbital.E, orbital.basisatoms))
 
 
-def _get_value(parser, var):
-    if var in ('totalE', 'E'):
-        return parser.energies['total']
-    elif var in ('1-e', '1-e energy'):
-        return parser.energies['1-e energy']
-    elif var in ('2-e', '2-e energy'):
-        return parser.energies['2-e energy']
-    elif var in ('HOMO', 'homo'): 
-        return parser.energies['HOMO']
-    elif var in ('LUMO', 'lumo'): 
-        return parser.energies['LUMO']
+def plot_atom_distances(atom, ax=None, species=None, bins=50, **kwargs):
+    if isinstance(ax, type(None)): fig, ax = plt.subplots(1,1)
+    else: fig = ax.figure
+    if isinstance(species, str): species = [species]
+    neighborAtoms = atom.get_neighbors_by_dist()
+    speciesDict = dict()
+    distRange = [np.inf, -np.inf]
+    for i, tup in enumerate(neighborAtoms):
+        natom = tup['atom']
+        dist = tup['dist']
+        if natom.species not in speciesDict:
+            speciesDict[natom.species] = []
+        speciesDict[natom.species].append(dist)
+        if dist < distRange[0]: distRange[0] = dist
+        if dist > distRange[1]: distRange[1] = dist
     
+    for atomSpecies, vals in speciesDict.items():
+        if isinstance(species, (tuple, list)):
+            if atomSpecies not in species:
+                continue
+        ax.hist(vals, label=atomSpecies, range=distRange, bins=bins, **kwargs)
+    
+    ax.set_xlabel('Distance (Angstrom)')
+    ax.set_ylabel('Counts')
+    ax.legend()
+    return fig, ax
 
-def plot_total_energies(parsers, yvar='totalE', fig=None, ax = None, **kwargs):
+def plot_total_energies(parsers,  ax = None, **kwargs):
     """takes in a list of nwchem parsers"""
-    if isinstance(ax, type(None)):
-        fig, ax = plt.subplots(1,1)
+    if isinstance(ax, type(None)): fig, ax = plt.subplots(1,1)
+    else: fig = ax.figure
 
     if isinstance(parsers, nwparse.nwchem_parser):
         parsers = [parsers]
     xvals = []
     yvals = []
     for i, parser in enumerate(parsers):
-        pass 
-
+        try:
+            yvals.append(parser.dft_energies['total'])
+            xvals.append(i)
+        except KeyError:
+            continue
+    print(xvals, yvals)
+    ax.plot(xvals, yvals, **kwargs)
     
-
+    return fig, ax
 
 def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0, xlabel=None,
         conditions = [

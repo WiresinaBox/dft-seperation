@@ -8,7 +8,7 @@ import plotutil as pltu
 import mpld3
 from mpld3 import plugins, utils
 import json
-
+import glob
 #OUTLINE FOR FUTURE:
 #1. JS/Python interface: Flask
 #2. UI: React
@@ -20,10 +20,13 @@ import json
 #3. Energy level diagrams, each structure side by side to see evolution
 #4. Energy level filter by certain parameters
 
-parsers = {'testing1':'dummy parser1', 'testing2':'dummy parser2'}
+#parsers = {'testing1':'dummy parser1', 'testing2':'dummy parser2'}
+fns = glob.glob('../outfiles/la-9water-3C301-3+/ecce.out*')
+#parsers = {'testing1':'dummy parser1', 'testing2':'dummy parser2'}
+parsers = {fn:'dummy parser' for fn in fns}
 
 def launchSite():
-    app = flask.Flask(__name__)
+    app = flask.Flask(__name__, template_folder='./templates', static_folder='./templates/static')
     api.parserDict.update(parsers)
     app.register_blueprint(parser_api, url_prefix='/api')
     #parser_api.init_app(apibp)
