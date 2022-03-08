@@ -74,11 +74,17 @@ class complexList extends React.Component{
         constructor(props){
                 super(props);
                 this.state = {};
-                this.state.complexes=[];
+                this.state.complexes=[]; 
                 this.currentActive = null;
                 this.currentActiveIndex = null;
-                this.push(props.complexes);
-                this.loadFromJson(props.json);
+                //process on load
+                if (typeof props.complexes != 'undefined'){
+                        this.push(props.complexes);
+                }
+                if (typeof props.json != 'undefined'){
+                        this.loadFromJson(props.json);
+                }
+                //bind functions to each instance
                 this.push.bind(this);
                 this.loadFromJson.bind(this);
                 this.setAllUnActive.bind(this);
@@ -93,11 +99,14 @@ class complexList extends React.Component{
                 } else {
                         var values = val
                 }
-                var tempState = {...this.state}
-                for (var i = 0; i < values.length; i++) {
-                        tempState.complexes.push({'complex':values[i], 'active':false});
-                this.setState(tempState);
 
+                if (typeof val != 'undefined') {
+                        var tempState = {...this.state}
+                        for (var i = 0; i < values.length; i++) {
+                                tempState.complexes.push({'complex':values[i], 'active':false});
+                        this.setState(tempState);
+
+                        }
                 }
         }
 
@@ -120,9 +129,14 @@ class complexList extends React.Component{
 
         }
 
+        getComplexes() {
+                return(this.state.complexes)
+        }
         //returns the current selected item.
         getSelected () {
-                return(this.state.currentActive.complex)
+                if (typeof this.state.currentActive != 'undefined'){
+                        return(this.state.currentActive.complex)
+                }
         }
 
         removeSelected () {
@@ -143,6 +157,7 @@ class complexList extends React.Component{
                 }
                 //this.setAllUnActive()
         }
+
 
         cb (index){
                 this.setAllUnActive()
@@ -194,7 +209,6 @@ function reactButton(props){
 }
 
 class selectControls extends React.Component{
-
         constructor(props){
                 super(props);
                 this.state = {}
@@ -210,11 +224,11 @@ class selectControls extends React.Component{
                         case 'remove':
                                 this.state.removeSelected()
                                 break;
-
+                        case 'plot':
+                                this.plotSelected();
+                                break;
                         default:
                                 console.log(`selectControls: Unknown action ${action}`)
-
-
                 }
         }
 
@@ -234,7 +248,46 @@ class selectControls extends React.Component{
                 var tempState = {...this.state}
                 tempState.removeSelected = rList.removeSelected.bind(rList);
                 this.setState(tempState);
+        }
+
+        setPlotList(pList){
+                var tempState = {...this.state}
+                tempState.getPlotComplexes = pList.getComplexes.bind(pList); //binds it to the specific method within the list
+                this.setState(tempState);
+        }
+
+        //method references to plot divs to push info into them
+       
+        setEnergyPlot(pDiv){
+                var tempState = {...this.state}
+                tempState.setEnergyHTML = pDiv.setHTML.bind(pDiv); //binds it to the specific method within the list
+                this.setState(tempState);
+        }
+
+        plotSelected() {
+                var complexes = this.state.getPlotComplexes()
                 
+                var plotType='energy' //expand this later on to multiple plot types in control
+                var setHTML = this.state.setEnergyHTML
+                
+                var complexNames = []
+                for (var i = 0; i < complexes.length; i++){
+                        console.log(complexes[i]);
+                        complexNames.push(complexes[i].complex);
+                }
+                var dataStr = JSON.stringify({'plotType':plotType,'complexList':complexNames});
+                $.ajax({
+                  method: "POST",
+                  url:"/api/plots", //use this to define which api you're talking to
+                  data: dataStr, 
+                  success: function (data) {
+                        var json = JSON.parse(data);
+                        console.log(json);  
+                        setHTML(json); 
+                        }, 
+                  dataType: "json"
+                });
+
         }
 
 
@@ -242,11 +295,64 @@ class selectControls extends React.Component{
                 return(React.createElement('div', {'id':'selectControls'}, [
                         React.createElement(reactButton, {'name':'Add', 'action':'add', 'cb':this.cb.bind(this)}, null),
                         React.createElement(reactButton, {'name':'Remove', 'action':'remove', 'cb':this.cb.bind(this)}, null),
+                        React.createElement(reactButton, {'name':'Plot', 'action':'plot', 'cb':this.cb.bind(this)}, null),
                         ])
                 );
         }
 }
 
+//So HTML5 does not allow for scripts to run within innerHTML
+//The solution to this is to create a new script element and append the script text as a child
+class plotDiv extends React.Component{
+        constructor (props) {
+                super(props);
+                this.state = {};
+                this.state.div={};
+                this.state.script={};
+                this.state.style={};
+        }
+
+        _getHTML(html){
+                return {__html:html}
+        }
+
+        
+        setHTML(json){
+                var tempState = {...this.state}
+                tempState.div = json.div
+                tempState.script = json.script
+                tempState.style = json.style
+                this.setState(tempState);
+                this.renderPlot();
+        }
+        renderPlot() {
+                var plotContainer = document.getElementById('plot')
+                plotContainer.textContent=''; //clears the div
+                var inlineScript = document.createTextNode(this.state.script.data);
+                var plotScript = document.createElement('script')
+                plotScript.appendChild(inlineScript);
+                
+                var inlineStyle = document.createTextNode(this.state.style.data);
+                var plotStyle = document.createElement('style') 
+                plotStyle.appendChild(inlineStyle);
+                
+                var inlineDiv = document.createTextNode(this.state.div.data);
+                var plotDiv = document.createElement('div')
+                plotDiv.setAttribute('id', this.state.div.attrs.id)
+                plotDiv.appendChild(inlineDiv);
+                
+                plotContainer.appendChild(plotStyle)
+                plotContainer.appendChild(plotDiv)
+                plotContainer.appendChild(plotScript)
+
+        }
+        render() {
+
+                return(React.createElement('div', {'className':'plot', 'id':'plot'})) 
+        }
+
+}
+//ADD COMPONENTS TO PAGE
 var availList = ReactDOM.render(
         React.createElement(complexList, {'title':'Available Complexes', 'key':'availList'}, null),
         document.getElementById("selectLeft"),
@@ -261,9 +367,18 @@ var controls = ReactDOM.render(
         React.createElement(selectControls, null, null),
         document.getElementById('selectRight'),
 );
+
+var energyPlot = ReactDOM.render(
+        React.createElement(plotDiv, null, null),
+        document.getElementById("plotRow"),
+);
+
+//Bind specific functions to the controls
 controls.setInputList(availList);
 controls.setOutputList(plotList);
 controls.setRemoveList(plotList);
+controls.setPlotList(plotList);
+controls.setEnergyPlot(energyPlot);
 
 //Use jQuery to communicate with the backend
 $(document).ready(function() {

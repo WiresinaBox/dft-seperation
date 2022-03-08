@@ -6,10 +6,35 @@ import mpld3
 from mpld3 import plugins, utils
 import nwchem_parse as nwparse
 import time
+from html.parser import HTMLParser
 
 dist = lambda p1, p2: np.sqrt((p1-p2)**2)
 
 figDict = dict()
+
+class mpld3HTMLParser(HTMLParser):
+    lastTag = None
+    tagDict = {}
+    
+    def handle_starttag(self, tag, attrs):
+        print('found starttag', tag, attrs)
+        self.lastTag=tag
+        self.tagDict[tag] = {'attrs':dict(attrs)}
+    def handle_data(self, data):
+        print('data', data.strip())
+        if data.strip() != '':
+            print('placing data')
+            self.tagDict[self.lastTag]['data'] = data
+
+    def get_data(self, tag):
+        if tag in self.tagDict:
+            if 'data' in self.tagDict[tag]:
+                return self.tagDict[tag]
+            else:
+                return None
+        else:
+            raise ValueError('plotutil.mpld3HTMLParser.get_data(): Tag not recognized: {}'.format(tag))
+
 
 class replace_ticks(plugins.PluginBase):
     """So apparently mpld3 doesn't replace tick labels?? A minor detail but like. I wanna do it anyways"""

@@ -21,13 +21,51 @@ import glob
 #4. Energy level filter by certain parameters
 
 #parsers = {'testing1':'dummy parser1', 'testing2':'dummy parser2'}
-fns = glob.glob('../outfiles/la-9water-3C301-3+/ecce.out*')
+fns = glob.glob('../outfiles/la-9water-3C301-3+/nwchem.out*')
 #parsers = {'testing1':'dummy parser1', 'testing2':'dummy parser2'}
-parsers = {fn:'dummy parser' for fn in fns}
+parserDict = {fn.split('/')[-1]:{'filename': fn} for fn in fns}
+
+
+def getParserInfoFromCall(complexList):
+    returnList=[]
+    for complexName in complexList:
+        parserInfo = parserDict[complexName]
+        returnList.append(parserInfo)
+    return returnList
+
+def getParsersFromCall(complexList):
+    """Returns a list of parsers from the requested string names. Will save previously generated parsers"""
+    returnList = []
+    for parserInfo in getParserInfoFromCall(complexList):
+        if 'parser' in parserInfo:
+            returnList.append(parserInfo['parser'])
+        else:
+            p = nwparse.nwchem_parser(parserInfo['filename'])
+            parserInfo['parser']=p #add new parser in
+            returnList.append(p)
+
+    for p in returnList:
+        print(p, p.runinfo)
+    return returnList
+
+def getEnergyPlot(complexList):
+    parserInfosList = getParserInfoFromCall(complexList)
+    parserList = getParsersFromCall(complexList)#same ordering
+
+    fig, ax = pltu.plot_total_energies(parserList, label=complexList, marker='o')
+    html = mpld3.fig_to_html(fig)
+    htmlParser = pltu.mpld3HTMLParser()
+    htmlParser.feed(html)
+    return json.dumps(htmlParser.tagDict)
+     
+    
 
 def launchSite():
     app = flask.Flask(__name__, template_folder='./templates', static_folder='./templates/static')
-    api.parserDict.update(parsers)
+    api.parserDict.update(parserDict)
+    #Set all of the special functions it calls
+    api.processComplexFunc = getParsersFromCall 
+    api.plotEnergyFunc = getEnergyPlot 
     app.register_blueprint(parser_api, url_prefix='/api')
     #parser_api.init_app(apibp)
 
@@ -38,6 +76,8 @@ def launchSite():
 
 
     return app
+
+
 
 if __name__=='__main__':
     app = launchSite()

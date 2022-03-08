@@ -21,7 +21,9 @@ api.add_namespace(ns)
 
 #Data to pass in.
 parserDict = {}
-
+#reference to function to deal with plot requests. Takes in a list of complex names
+processComplexFunc = None 
+plotEnergyFunc = None 
 
 
 #Each of these defines the endpoints to listen to
@@ -40,3 +42,34 @@ class structAPI(Resource):
         print(parserDict)
         returnData = parserDict[fn] #Change this later to whatever we need
         return json.dumps(returnData)
+
+@api.route('/plots') 
+class plotAPI(Resource):
+    #Each HTML signal gets its own thing here
+    #Anything (like Curl) that pings 'url/data' will get this back.
+    #def get(self):
+    #    """Return a json of names already in database ready to go"""
+    #    print('getting something!')
+    #    return json.dumps(list(parserDict.keys()))
+
+    #the second variable is the name of the route. e.g. "url/hello", then filename='hello'
+    def post(self):
+        req = json.loads(request.get_data().decode()) #Bytes to string
+        print(req)
+        plotType = req['plotType']
+        complexList = req['complexList']
+        if plotType == 'energy':
+            if isinstance(plotEnergyFunc, type(None)):
+                print('api.py: NOTE! api.processComplexFunc() has not been set yet')
+                data = 'api.plotEnergyFunc has not been set yet!'
+            else:
+                data = plotEnergyFunc(complexList)
+
+        else:
+            if isinstance(processComplexFunc, type(None)):
+                print('api.py: NOTE! api.processComplexFunc() has not been set yet')
+                data = 'api.processComplexFunc has not been set yet!'
+            else:
+                data = processComplexFunc(complexList)
+        
+        return data 
