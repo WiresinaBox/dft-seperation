@@ -13,6 +13,31 @@ parser = argparse.ArgumentParser()
 parser.add_argument('filepath', nargs = '+')
 args = parser.parse_args()
 
+
+def plotEnergies():
+    fig, ax = plt.subplots(1,1)
+    dataDir = '../outfiles'
+    print(os.listdir(dataDir))
+    for subDir in os.listdir(dataDir):
+        subDirPath = dataDir + '/' + subDir
+        if os.path.isdir(subDirPath):
+            outFiles = sorted([fn for fn in os.listdir(subDirPath) if fn.startswith('nwchem.out')], key = lambda x: float(x.split('.')[2]))
+            print(outFiles)
+            parsers = []
+            for i, fn in enumerate(outFiles):
+                print('[{}/{}] {} | {}'.format(i+1, len(outFiles), subDir, fn))
+                path = subDirPath+'/'+fn
+                parsers.append(nwparse.nwchem_parser(path)) 
+            pltu.plot_total_energies(parsers, label=subDir, marker='o', ax=ax)
+            
+    ax.legend()
+    plt.savefig('energies.png')
+    plt.show()    
+
+
+#plotEnergies()
+#quit()
+
 fnList = args.filepath #nargs=+ returns a list of at least one.
 parserList = []
 
@@ -21,10 +46,15 @@ for fn in fnList:
     parserList.append(p)
     print(p.dft_energies)
     atomList = p.get_atoms(species = 'La', asList = True)
-    for atom in atomList:
-        print(atom.id)
-        print(atom.get_neighbors_by_dist(6, species='O'))
-        
+    print(atomList)
+    fig,ax = pltu.plot_atom_distances(atomList[0], species=None)
+    #fig, ax = pltu.plot_total_energies([p, p, p], label=fn, marker='o')
+
+    #for atom in atomList:
+    #    print(atom.id)
+    #    print(atom.get_neighbors_by_dist(6, species='O'))
+ax.legend()
+plt.show()    
 
 quit()
 fig, ax = plt.subplots(1,1, figsize=(6,7), tight_layout=True)

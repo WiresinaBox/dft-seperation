@@ -177,8 +177,7 @@ class nw_atom():
                 distpass = False
 
             if idpass and speciespass and distpass:
-                returnList.append(a)
-                print(a, dist)
+                returnList.append(tup)
         if len(returnList) == 1 and not asList: return returnList[0]
         else: return returnList
 
