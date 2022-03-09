@@ -144,7 +144,6 @@ class complexList extends React.Component{
                 var i = this.state.currentActiveIndex;
                 if (typeof i === 'number') {
                         tempState.complexes.splice(i, 1);
-                        console.log(i, tempState.complexes.length)
                         if (i < tempState.complexes.length) {
                                 var newActive = tempState.complexes[i];
                                 newActive.active=true;
@@ -212,10 +211,10 @@ class selectControls extends React.Component{
         constructor(props){
                 super(props);
                 this.state = {}
+                this.state.plotFuncs = new Map();
         }
         
         cb (action) { //given to the buttons
-                console.log(action);
                 switch(action){
                         case 'add':
                                 var complex = this.state.getInputSelected()
@@ -258,21 +257,20 @@ class selectControls extends React.Component{
 
         //method references to plot divs to push info into them
        
-        setEnergyPlot(pDiv){
+        setPlotHandler(plotType, pDiv){
                 var tempState = {...this.state}
-                tempState.setEnergyHTML = pDiv.setHTML.bind(pDiv); //binds it to the specific method within the list
+                tempState.plotFuncs.set(plotType, pDiv.setHTML.bind(pDiv)); //binds it to the specific method within the list
                 this.setState(tempState);
         }
 
         plotSelected() {
                 var complexes = this.state.getPlotComplexes()
                 
-                var plotType='energy' //expand this later on to multiple plot types in control
-                var setHTML = this.state.setEnergyHTML
+                var plotType='all' //expand this later on to multiple plot types in control
+                var plotFuncs = this.state.plotFuncs
                 
                 var complexNames = []
                 for (var i = 0; i < complexes.length; i++){
-                        console.log(complexes[i]);
                         complexNames.push(complexes[i].complex);
                 }
                 var dataStr = JSON.stringify({'plotType':plotType,'complexList':complexNames});
@@ -281,10 +279,14 @@ class selectControls extends React.Component{
                   url:"/api/plots", //use this to define which api you're talking to
                   data: dataStr, 
                   success: function (data) {
-                        var json = JSON.parse(data);
-                        console.log(json);  
-                        setHTML(json); 
-                        }, 
+                        var plotData = Object.entries(data);
+                        //console.log(json);
+                        for (var i = 0; i < plotData.length; i++){
+                                var pair = plotData[i];
+                                var plotFunc = plotFuncs.get(pair[0]);
+                                plotFunc(JSON.parse(pair[1]));
+                        }
+                        },
                   dataType: "json"
                 });
 
@@ -303,13 +305,19 @@ class selectControls extends React.Component{
 
 //So HTML5 does not allow for scripts to run within innerHTML
 //The solution to this is to create a new script element and append the script text as a child
+
+
 class plotDiv extends React.Component{
         constructor (props) {
                 super(props);
                 this.state = {};
+                this.state.id = 'plot_figure_'+props.id.toString();
                 this.state.div={};
                 this.state.script={};
                 this.state.style={};
+                if (typeof props.json === 'object') {
+                        this.setHTML(props.json);
+                }
         }
 
         _getHTML(html){
@@ -323,34 +331,62 @@ class plotDiv extends React.Component{
                 tempState.script = json.script
                 tempState.style = json.style
                 this.setState(tempState);
-                this.renderPlot();
+                this.renderPlot()
         }
         renderPlot() {
-                var plotContainer = document.getElementById('plot')
+                //Adds some normal HTML stuff as a node to the React element.
+                var plotContainer = document.getElementById(this.state.id)
                 plotContainer.textContent=''; //clears the div
-                var inlineScript = document.createTextNode(this.state.script.data);
                 var plotScript = document.createElement('script')
-                plotScript.appendChild(inlineScript);
+                if (typeof this.state.script.data != 'undefined') {
+                        var inlineScript = document.createTextNode(this.state.script.data);
+                        plotScript.appendChild(inlineScript);
+                }
                 
-                var inlineStyle = document.createTextNode(this.state.style.data);
                 var plotStyle = document.createElement('style') 
-                plotStyle.appendChild(inlineStyle);
-                
-                var inlineDiv = document.createTextNode(this.state.div.data);
+                if (typeof this.state.style.data != 'undefined') {
+                        var inlineStyle = document.createTextNode(this.state.style.data);
+                        plotStyle.appendChild(inlineStyle);
+                }
                 var plotDiv = document.createElement('div')
                 plotDiv.setAttribute('id', this.state.div.attrs.id)
-                plotDiv.appendChild(inlineDiv);
-                
-                plotContainer.appendChild(plotStyle)
-                plotContainer.appendChild(plotDiv)
-                plotContainer.appendChild(plotScript)
+                if (typeof this.state.div.data != 'undefined') {
+                        var inlineDiv = document.createTextNode(this.state.div.data);
+                        plotDiv.appendChild(inlineDiv);
+                } 
+                plotContainer.appendChild(plotStyle);
+                plotContainer.appendChild(plotDiv);
+                plotContainer.appendChild(plotScript);
 
         }
         render() {
 
-                return(React.createElement('div', {'className':'plot', 'id':'plot'})) 
+                return(React.createElement('div', {'className':'plot container', 'id':this.state.id})) 
         }
 
+}
+
+class plotManager extends React.Component{
+        constructor (props) {
+                super(props);
+                this.state = {};
+                this.state.children = [];
+        }
+
+        setHTMLFromArray(jsonArray){
+                var tempState = {...this.state}
+                for (var i = 0; i < jsonArray.length; i++) {
+                        var json = JSON.parse(jsonArray[i]);
+                        var child = React.createElement(plotDiv, {'id':i, 'json':json}, null);
+                        tempState.children.push(child);
+                        
+                }
+                this.setState(tempState);
+
+        }
+        render() {
+                return(React.createElement('div', {'className':'plotManager container'}, this.state.children)) 
+        }
 }
 //ADD COMPONENTS TO PAGE
 var availList = ReactDOM.render(
@@ -368,17 +404,17 @@ var controls = ReactDOM.render(
         document.getElementById('selectRight'),
 );
 
-var energyPlot = ReactDOM.render(
-        React.createElement(plotDiv, null, null),
-        document.getElementById("plotRow"),
-);
+
+//var plotRowManager = ReactDOM.render(
+//        React.createElement(plotManager, null, null),
+//        document.getElementById("plotRow"),
+//);
 
 //Bind specific functions to the controls
 controls.setInputList(availList);
 controls.setOutputList(plotList);
 controls.setRemoveList(plotList);
 controls.setPlotList(plotList);
-controls.setEnergyPlot(energyPlot);
 
 //Use jQuery to communicate with the backend
 $(document).ready(function() {
@@ -392,17 +428,38 @@ $(document).ready(function() {
                 }, 
 	  dataType: "html"
 	});
+	
+        $.ajax({ //Gets the available plots and creates them all to sit in the background until needed
+	  method: "GET",
+	  url:"/api/plots", //use this to define which api you're talking to
+	  success: function (data) {
+                var json = JSON.parse(data);
+                var plotRow = document.getElementById("plotRow")
+                for (var i = 0; i < json.length; i++){
+                        var container = document.createElement('div')
+                        container.setAttribute('id', `plot-container-${i} row`)
+                        plotRow.appendChild(container);
+
+                        
+                        var plotHandler = ReactDOM.render(
+                                React.createElement(plotDiv, {'id':json[i]}, null),
+                                container,
+                        );
+                        
+                        controls.setPlotHandler(json[i], plotHandler);
+                }
+                }, 
+	  dataType: "html"
+	});
 
 	$("#complex-select").change(function (){
 	  var complex = $(this).children("option:selected").val();
-	  console.log(complex);
 	  $.ajax({
 	      method:"PUT",
 	      data: complex,
 	      url:"/api/filename",
 	      success: function (data){
 		  var dataArray = JSON.parse(JSON.parse(data));
-		  console.log(dataArray);  
 		
 	      },
 	      dataType:"html"

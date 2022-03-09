@@ -17,13 +17,10 @@ class mpld3HTMLParser(HTMLParser):
     tagDict = {}
     
     def handle_starttag(self, tag, attrs):
-        print('found starttag', tag, attrs)
         self.lastTag=tag
         self.tagDict[tag] = {'attrs':dict(attrs)}
     def handle_data(self, data):
-        print('data', data.strip())
         if data.strip() != '':
-            print('placing data')
             self.tagDict[self.lastTag]['data'] = data
 
     def get_data(self, tag):
@@ -52,10 +49,11 @@ class replace_ticks(plugins.PluginBase):
     }
 
     TickMarkPlugin.prototype.draw = function() {
-        var obvconfig = {attributes: true, childList: true, subtree: true}
+        var obvconfig = {childList: true, subtree: true, attributes:true}
         var props = this.props
-        var yaxis = d3.select(".mpld3-yaxis")
-        var xaxis = d3.select(".mpld3-xaxis")
+        var figid = this.fig.figid;
+        var yaxis = d3.select('#'+figid).select(".mpld3-yaxis")
+        var xaxis = d3.select('#'+figid).select(".mpld3-xaxis")
         updateAxis(props, xaxis, yaxis);
         //listen in for any changes to the axis and then reverse the changes
         var obv = new MutationObserver(function() {
@@ -67,11 +65,11 @@ class replace_ticks(plugins.PluginBase):
 
     
     function updateAxis(props, xaxis, yaxis) {
-        var yaxisticks = yaxis.selectAll(".tick").selectAll('tspan').nodes()
-        var xaxisticks = xaxis.selectAll(".tick").selectAll('tspan').nodes()
+        var yaxisticks = yaxis.selectAll(".tick").selectAll('text')
+        var xaxisticks = xaxis.selectAll(".tick").selectAll('text')
         for (var j = 0; j < props.xticks.length; j++) {
             for (var i = 0; i < xaxisticks.length; i++) {
-                var tick = xaxisticks[i]
+                var tick = xaxisticks[i][0]
                 if (props.xticks[j][0] === tick.innerHTML) {
                     tick.innerHTML = props.xticks[j][1] 
                 }
@@ -105,6 +103,7 @@ class replace_ticks(plugins.PluginBase):
             self._yticks.extend([str(int(np.ceil(float(val)))) for val in self._yticks])
             self._xticklabels.extend(self._xticklabels)
             self._yticklabels.extend(self._yticklabels)
+            print(self._xticks)
         self.dict_=dict()
         
         self._setup()
@@ -152,13 +151,13 @@ class energy_level_ievents(plugins.PluginBase):
         var figdiv = d3.select('#'+this.fig.figid)
                                         .attr("class", "plotdiv")
 
-        var eleveldiv = d3.select("body").append('div', 'b')
-                                        .attr("class", "figContainer")
+        //var eleveldiv = d3.select(this.id).append('div', 'b')
+        //                                .attr("class", "figContainer")
        
         //use .node() to get the actual html element
-        eleveldiv.node().appendChild(figdiv.node())
+        //eleveldiv.node().appendChild(figdiv.node())
         
-        var infodiv = eleveldiv
+        var infodiv = figdiv
                         .append("div")
                             .attr("class", "infodiv")
                             .attr("name", "orbitalinfo")
@@ -194,37 +193,64 @@ class energy_level_ievents(plugins.PluginBase):
         textcenter = d3.select("#center")
         textr2 = d3.select("#r2")
         textbasisfuncs = d3.select("#basisfuncs")
-
+       
+        function foo(event){
+            console.log('click!');
+        }
 
         var objList = []
+
         for (var i=0; i < this.props.levelLines.length; i++) {
-            
             var lineObj = mpld3.get_element(this.props.levelLines[i], this.fig);
-            var ghostObj = mpld3.get_element(this.props.selectMarkers[i], this.fig);
-            var spinsObj = mpld3.get_element(this.props.spinMarkers[i], this.fig);
             var data = this.props.data[i];
-            
-            var a = this.props.levelLines[i]
-            // get_element might return null if the id is a Line2D for some reason. 
-            data.lineObj = lineObj 
-            data.spinsObj = spinsObj 
-            ghostObj.elements()
-                .datum(data)
-                .on("mouseover", function(d,j) {
-                                    d.lineObj.elements()
-                                        .style("stroke-width", 10);
-                                    changeText(d, j);
-                                })
-                .on("mouseout", function(d,j) {
-                                    d.lineObj.elements()
-                                        .style("stroke-width", d.markersize);
-                                    changeText(d, j);
-                                })
+            var line = lineObj.path[0][0]
+            line.setAttribute('select', false);
+            line.addEventListener('mouseover', onHover.bind(null, line, data)); 
+            line.addEventListener('mouseout', offHover.bind(null, line, data)); 
         }
+        //for (var i=0; i < this.props.selectMarkers.length; i++) {
+        //    //var lineObj = mpld3.get_element(this.props.levelLines[i], this.fig);
+        //    var ghostObj = mpld3.get_element(this.props.selectMarkers[i], this.fig);
+        //    //var spinsObj = mpld3.get_element(this.props.spinMarkers[i], this.fig);
+        //    var data = this.props.data[i];
+        //    
+        //    var a = this.props.levelLines[i]
+        //    // get_element might return null if the id is a Line2D for some reason. 
+        //    //data.lineObj = lineObj 
+        //    //data.spinsObj = spinsObj
+        //    console.log(ghostObj);
+        //    ghostObj.elements()
+        //        .datum(data)
+        //        .on("mouseover", function(d,j) {
+        //                            d.lineObj.elements()
+        //                                .style("stroke-width", 10);
+        //                            changeText(d, j);
+        //                        })
+        //        .on("mouseout", function(d,j) {
+        //                            d.lineObj.elements()
+        //                                .style("stroke-width", d.markersize);
+        //                            changeText(d, j);
+        //                        })
+        //}
         
         //d is the datum, specifies points and stuff. i is the index within d of the point just touched.
-        function changeText(d, i){
-            //console.log(d);
+        function onHover(obj, d){
+            //changeText(d);
+            obj.style['stroke-width']=10;
+            changeText(d);
+        }
+        function offHover(obj, d){
+            obj.style['stroke-width']=d.linewidth;
+        }
+        
+        function onClick(obj, d){
+            console.log(obj);
+            changeText(d);
+            obj.setAttribute('select', true);
+            obj.style['stroke-width']=d.linewidth;
+        }
+
+        function changeText(d){
             textE.text(d.E);
             textocc.text(d.occ);
             textvector.text(d.vector);
@@ -244,8 +270,9 @@ class energy_level_ievents(plugins.PluginBase):
         grid-template-columns: 1fr 1fr;
         grid-template-rows: 1fr;
     }
-
-
+    #plotdiv div{
+        float: left;
+    }
     .infolabel {
         display:inline;
     }
@@ -306,7 +333,7 @@ class energy_level_ievents(plugins.PluginBase):
 #            s = 
 #            
     
-    def _plot_ghost_markers(self,line2D, marker = '.', markersize=1,visible=False):
+    def _plot_ghost_markers(self,line2D, marker = 'o', markersize=5,visible=True):
         #Currently assumes flat line
         x = line2D.get_xdata()
         y = line2D.get_ydata()
@@ -348,7 +375,7 @@ class energy_level_ievents(plugins.PluginBase):
         else:
             self._artistsDict[artist] = orbital
    
-    def setup_data(self, spinMarkerSize=5, visibleGhosts=False):
+    def setup_data(self, spinMarkerSize=5, visibleGhosts=True):
         """This sets up all the data and element ids for usage in the javascript protion"""
         items = self._artistsDict.items()
         artists = []
@@ -364,20 +391,20 @@ class energy_level_ievents(plugins.PluginBase):
         
         for tup in items:
             a, orb = tup
-            ghost = self._plot_ghost_markers(a, visible = visibleGhosts)
-            spins = self._plot_spin_markers(a, orb, markersize=spinMarkerSize)
+            #ghost = self._plot_ghost_markers(a, visible = visibleGhosts)
+            #spins = self._plot_spin_markers(a, orb, markersize=spinMarkerSize)
             if isinstance(a, matplotlib.lines.Line2D): suffix = 'pts'
             else: suffix = None
             suffix=None
-            self.dict_['spinMarkers'].append(utils.get_id(spins))
-            self.dict_['selectMarkers'].append(utils.get_id(ghost))
+            #self.dict_['spinMarkers'].append(utils.get_id(spins))
+            #self.dict_['selectMarkers'].append(utils.get_id(ghost))
             self.dict_['levelLines'].append(utils.get_id(a, suffix))
             dat = orb.get_data()
             dat.update({'linewidth':a.get_linewidth(),
                         'linecolor':a.get_color(),
                         })
             self.dict_['data'].append(dat)
-        print(self.dict_['levelLines'])
+        #print(self.dict_['levelLines'])
 
 
     def connect_tooltip_plugin(self, fig = 'self'):
@@ -476,7 +503,7 @@ def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0, x
     if isinstance(ax, type(None)):
         fig, ax = plt.subplots(1,1)
     if not ax.lines: #If the axis is freshly created, nuke the xlabels
-        print('hi')
+        #print('hi')
         ax.set_xticks([])
         ax.set_xticklabels([])
     #worstcase scenario: line length is whole plot width. 72 ppi

@@ -44,8 +44,6 @@ def getParsersFromCall(complexList):
             parserInfo['parser']=p #add new parser in
             returnList.append(p)
 
-    for p in returnList:
-        print(p, p.runinfo)
     return returnList
 
 def getEnergyPlot(complexList):
@@ -57,15 +55,32 @@ def getEnergyPlot(complexList):
     htmlParser = pltu.mpld3HTMLParser()
     htmlParser.feed(html)
     return json.dumps(htmlParser.tagDict)
-     
+
+def getEnergyLevelPlot(complexList):
+    parserInfosList = getParserInfoFromCall(complexList)
+    parserList = getParsersFromCall(complexList)#same ordering
+    
+    fig, ax = plt.subplots(1,1, figsize=(6,7), tight_layout=True)
+    for i,p in enumerate(parserList):
+        orbitalList = p.get_orbitals( basisSpecies = 'La', spin='both', asList = True)
+        HOMO, LUMO = p.get_HOMO_LUMO(basisSpecies = 'La', spin='both', setFlags=True)
+        fig, ax, handles = pltu.plot_energy_level(orbitalList, fig = fig, ax = ax, xlabel='La Basis Func', interactive=True, xlevel=i)
+    ax.legend(handles=handles)
+    
+    html = mpld3.fig_to_html(fig)
+    htmlParser = pltu.mpld3HTMLParser()
+    htmlParser.feed(html)
+    return json.dumps(htmlParser.tagDict)
     
 
 def launchSite():
     app = flask.Flask(__name__, template_folder='./templates', static_folder='./templates/static')
     api.parserDict.update(parserDict)
     #Set all of the special functions it calls
-    api.processComplexFunc = getParsersFromCall 
-    api.plotEnergyFunc = getEnergyPlot 
+    #api.plotFuncDict = getParsersFromCall 
+    api.plotFuncDict['energy'] = getEnergyPlot 
+    api.plotFuncDict['levels'] = getEnergyLevelPlot 
+    
     app.register_blueprint(parser_api, url_prefix='/api')
     #parser_api.init_app(apibp)
 
