@@ -150,6 +150,8 @@ class energy_level_ievents(plugins.PluginBase):
        
         var figdiv = d3.select('#'+this.fig.figid)
                                         .attr("class", "plotdiv")
+                                        .style('display', 'flex')
+                                        .style('flex-direction', 'row')
 
         //var eleveldiv = d3.select(this.id).append('div', 'b')
         //                                .attr("class", "figContainer")
@@ -163,6 +165,7 @@ class energy_level_ievents(plugins.PluginBase):
                             .attr("name", "orbitalinfo")
                             .style("height", 200)
                             .style("width", "100%")
+                            .style('flex', 1)
         
         for (var i = 0; i < this.props.infolabels.length; i++) {
             var labelinfo = this.props.infolabels[i];

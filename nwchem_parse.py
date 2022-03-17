@@ -3,8 +3,9 @@ import sys
 import numpy as np
 import re
 
-
 distL2 = lambda u, v: np.sqrt(np.sum((np.array(u) - np.array(v))**2))
+
+
 
 class nw_orbital():
     """Contains information for each alpha/beta orbital"""
@@ -94,6 +95,7 @@ class nw_orbital():
 
     def __repr__(self):
         return 'orbital({}, {})'.format(self._vector, self._spin)
+
 class nw_atom():
     """Contains all the information for atom specific information. Species, Iterations, Orbital information etc."""
 
@@ -138,7 +140,8 @@ class nw_atom():
     @property
     def coordination(self): return len(self._neighbors) 
 
-    
+    def xyz_string(self, delim=' '):
+        return '{}{delim}{}{delim}{}{delim}{}'.format(self._species, self._coordinates[0], self._coordinates[1], self._coordinates[2], delim=delim)
 
     def add_orbital(self, O):
         self._orbitals_dict[(O.vector, O.spin)] = O
@@ -455,7 +458,17 @@ class nwchem_parser():
                 returnList.append(a)
         if len(returnList) == 1 and not asList: return returnList[0]
         else: return returnList
-    
+   
+    def xyz_string(self):
+        #Returns the .xyz atom coordinate format. Chemdoodle should be able to infer covalent bonds
+        outStr = '{}\n'.format(len(self._atom_dict))
+        #outStr += 'fn={}, date={}, prefix={}\n'.format(self.fn, self._runinfo['date'], self._runinfo['prefix'])
+        outStr += 'testing\n'
+        for key, atom in self._atom_dict.items():
+            outStr+='{}\n'.format(atom.xyz_string())
+        return outStr
+            
+
     def __init__(self, fn, verbose=False):
         self._runinfo = dict()
         self._atom_dict = dict()    

@@ -1,10 +1,5 @@
 
 
-var complexSelect = document.getElementById('complex-select');
-var complexLists = document.getElementById('complexListsDiv');
-
-var addButton = document.getElementById('addComplexButton');
-var removeButton = document.getElementById('removeComplexButton');
 
 //resuable
 
@@ -50,7 +45,7 @@ var removeButton = document.getElementById('removeComplexButton');
 //}
 
 
-
+//Requires: props.name, props.cb (callback function), index
 function listElement (props) {
         if (props.key === undefined){
                 var key = props.name;
@@ -207,6 +202,112 @@ function reactButton(props){
         return React.createElement('button', {'className':`btn ${active}`, 'key':key, 'onClick':onClick}, props.name)
 }
 
+//Requires: props.name, props.cb (callback function), 
+function dropdownElement (props) {
+        if (props.key === undefined){
+                var key = props.name;
+        } else{
+                var key = props.key;
+        };
+        var onClick = function (e) {
+                var target = e.target
+                var name = target.textContent
+                props.cb(name);
+                return name
+        }
+        var active = ''
+        if (props.active === true) {
+                active = 'active'
+        }
+        return React.createElement('button', {'className':`list-group-item btn-sm ${active}`, 'key':key, 'onClick':onClick}, props.name)
+}
+
+//requires props.key, props.name, props.items, props.cb
+class reactDropdown extends React.Component{
+        constructor(props){
+                super(props);
+                this.state = {}
+                this.state.items = new Map;
+                this.state.currentActive = undefined;
+                this.state.supercb = props.cb //The call back to the original object. reactDropdown intercepts it to update elements.
+                this.state.name = props.name
+                if (props.key === undefined){
+                        var key = props.name;
+                } else{
+                        var key = props.key;
+                };
+                //this.state.listElement=this.renderElements(); 
+                
+               
+        }
+
+        push(val){
+                if (!(val instanceof Array)) {
+                        var values = [val]
+                } else {
+                        var values = val
+                }
+
+                if (typeof val != 'undefined') {
+                        var tempState = {...this.state}
+                        for (var i = 0; i < values.length; i++) {
+                                this.state.items.set(val[i], {'active':false});
+                        this.setState(tempState);
+
+                        }
+                }
+        }
+
+        renderElements(){
+                var elementArray = []
+                var items = Array.from(this.state.items.entries())
+                for (var i = 0; i < items.length; i++) {
+                        var complex = items[i][0]
+                        var tup = items[i][1]
+                        elementArray.push(React.createElement(dropdownElement, {'key':i, 'name':complex, 'cb':this.cb.bind(this), 'active':tup.active}, null));
+                }
+                return React.createElement('ul', {'className':'dropdown-menu', 'aria-labelledby':'dropdownMenuLink'}, elementArray);
+
+        }
+       
+        unsetAll(){
+                var tempState = {...this.state}
+                var keys = this.state.items.keys()
+                for (var i = 0; i < this.state.items.size; i++){
+                        tempState.items.get(keys.next().value).active=false
+                }
+                tempState.currentActive = undefined;
+                this.setState(tempState);
+        }
+        cb (val){
+                this.unsetAll()
+                var tempState = {...this.state}
+                tempState.items.get(val).active=true
+                tempState.currentActive=val
+                this.setState(tempState);
+                this.state.supercb(val);
+        }
+        render(){
+                if (this.state.items.size < this.props.items.length){
+                        this.push(this.props.items);
+                }
+                 
+                return React.createElement('div', {'className':'dropdown'}, [
+                        React.createElement('a', {
+                                'className': 'btn btn-primary dropdown-toggle', 
+                                'href':'#', 
+                                'role':'button',
+                                'data-bs-toggle':'dropdown',
+                                'aria-expanded':'false',
+                        }, this.state.name),
+                        this.renderElements(),
+                        
+                        
+                ])
+        }
+
+}
+
 class selectControls extends React.Component{
         constructor(props){
                 super(props);
@@ -283,8 +384,8 @@ class selectControls extends React.Component{
                         //console.log(json);
                         for (var i = 0; i < plotData.length; i++){
                                 var pair = plotData[i];
-                                var plotFunc = plotFuncs.get(pair[0]);
-                                plotFunc(JSON.parse(pair[1]));
+                                var plotFunc = plotFuncs.get(pair[0]); //Plottype
+                                plotFunc(JSON.parse(pair[1])); //plot data
                         }
                         },
                   dataType: "json"
@@ -324,7 +425,6 @@ class plotDiv extends React.Component{
                 return {__html:html}
         }
 
-        
         setHTML(json){
                 var tempState = {...this.state}
                 tempState.div = json.div
@@ -361,33 +461,106 @@ class plotDiv extends React.Component{
         }
         render() {
 
-                return(React.createElement('div', {'className':'plot container', 'id':this.state.id})) 
+                return(React.createElement('div', {'className':'plotContainer', 'id':this.state.id})) 
         }
 
 }
 
-class plotManager extends React.Component{
-        constructor (props) {
-                super(props);
-                this.state = {};
-                this.state.children = [];
+//Chemdoodle components
+
+class chemdoodlePlot extends React.Component{
+        constructor(props){
+                super(props)
+                this.state = {}
+                this.state.id = 'canvas_figure_'+props.id.toString();
+                var canvasType = props.canvasType;
+                if (typeof canvasType === 'string'){
+                        this.state.canvasType = canvasType; 
+                } else {
+                        this.state.canvasType = 'Ball and Stick';
+                }
+                this.state.molecules = new Map;
+
+
         }
 
-        setHTMLFromArray(jsonArray){
+        renderControlDiv(){
+                if (typeof this.state.canvas !== 'undefined'){
+                        var keys = Array.from(this.state.molecules.keys());
+                        console.log('hello', keys);
+                        var tempState = {...this.state}
+                        var controlDiv = React.createElement('div', {'className': 'container'}, [
+                                React.createElement(reactDropdown, {'name':'Complex', 'items':keys, 'cb':this.cb.bind(this), 'style':{'flex':1}}, null)
+                        ]);
+                        return controlDiv;
+               } else {
+                       return null
+               }
+        }
+
+        renderCanvas(){
                 var tempState = {...this.state}
-                for (var i = 0; i < jsonArray.length; i++) {
-                        var json = JSON.parse(jsonArray[i]);
-                        var child = React.createElement(plotDiv, {'id':i, 'json':json}, null);
-                        tempState.children.push(child);
+                var plotContainer = document.getElementById(this.state.id);
+                //Attach canvas to the container once
+                if (typeof this.state.canvas === 'undefined'){
+
+                        var canvas = document.createElement('canvas');
+                        canvas.setAttribute('id', this.state.id+'_canvas');
+                        canvas.style.flex=1;
+                        plotContainer.appendChild(canvas);
+                        //create chemdoodle canvas
+                        var doodlecanvas = new ChemDoodle.TransformCanvas3D(this.state.id+'_canvas', parseInt(window.innerWidth*0.4), parseInt(window.innerHeight*0.4));
+                        
+                        //set canvas styles and what not
+                        doodlecanvas.styles.set3DRepresentation(this.state.canvasType);
+                        doodlecanvas.styles.backgroundColor = 'black';
+                        doodlecanvas.emptyMessage='No Data Loaded!';
+                        doodlecanvas.repaint();
+                        tempState.canvas = doodlecanvas;
                         
                 }
+             
+
                 this.setState(tempState);
+        }
+
+        addMoleculeXYZ(key, xyzStr){
+                var tempState = {...this.state}
+                var mol = ChemDoodle.readXYZ(xyzStr);
+                tempState.molecules.set(key, mol);
+                this.setState(tempState);
+        }
+        //wrapper function to match plotDiv
+        setHTML(json){
+                var pairs = Object.entries(json);
+                for (var i = 0; i < pairs.length; i++){
+                        var pair = pairs[i];
+                        this.addMoleculeXYZ(pair[0], pair[1]);
+                }
+                this.renderCanvas()
+        }
+
+        //callback function
+        cb(key){
+                var doodlecanvas = this.state.canvas
+                doodlecanvas.loadMolecule(this.state.molecules.get(key));
+                
+        }
+        
+        render() {
+                return React.createElement('div', {'id': this.state.id, 'className': 'doodleContainer', 'style':{'display':'flex','flexDirection':'row' }}, this.renderControlDiv())
 
         }
-        render() {
-                return(React.createElement('div', {'className':'plotManager container'}, this.state.children)) 
-        }
+
 }
+
+
+
+
+
+
+
+
 //ADD COMPONENTS TO PAGE
 var availList = ReactDOM.render(
         React.createElement(complexList, {'title':'Available Complexes', 'key':'availList'}, null),
@@ -435,16 +608,25 @@ $(document).ready(function() {
 	  success: function (data) {
                 var json = JSON.parse(data);
                 var plotRow = document.getElementById("plotRow")
+                console.log(json);
                 for (var i = 0; i < json.length; i++){
                         var container = document.createElement('div')
-                        container.setAttribute('id', `plot-container-${i} row`)
+                        container.setAttribute('id', `plot-container-${i}`)
+                        container.setAttribute('class', `row`)
                         plotRow.appendChild(container);
+                        if (json[i] === 'structure') {
+                                var plotHandler = ReactDOM.render(
+                                        React.createElement(chemdoodlePlot, {'id':json[i]}, null),
+                                        container,
+                                );
 
-                        
-                        var plotHandler = ReactDOM.render(
-                                React.createElement(plotDiv, {'id':json[i]}, null),
-                                container,
-                        );
+                        } else {
+                                var plotHandler = ReactDOM.render(
+                                        React.createElement(plotDiv, {'id':json[i]}, null),
+                                        container,
+                                );
+
+                        }
                         
                         controls.setPlotHandler(json[i], plotHandler);
                 }
@@ -452,20 +634,6 @@ $(document).ready(function() {
 	  dataType: "html"
 	});
 
-	$("#complex-select").change(function (){
-	  var complex = $(this).children("option:selected").val();
-	  $.ajax({
-	      method:"PUT",
-	      data: complex,
-	      url:"/api/filename",
-	      success: function (data){
-		  var dataArray = JSON.parse(JSON.parse(data));
-		
-	      },
-	      dataType:"html"
-
-	  });
-	});
 });
 
 
