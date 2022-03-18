@@ -439,9 +439,12 @@ class plotDiv extends React.Component{
                 plotContainer.textContent=''; //clears the div
                 var plotScript = document.createElement('script')
                 if (typeof this.state.script.data != 'undefined') {
+                        plotScript.appendChild(document.createTextNode("import { plotHandlerRef } from '/static/control.js';\n"));
                         var inlineScript = document.createTextNode(this.state.script.data);
                         plotScript.appendChild(inlineScript);
                 }
+                //for passing in references to other plot modules using plotHandlerRef
+                plotScript.setAttribute('type', 'module');
                 
                 var plotStyle = document.createElement('style') 
                 if (typeof this.state.style.data != 'undefined') {
@@ -480,6 +483,7 @@ class chemdoodlePlot extends React.Component{
                         this.state.canvasType = 'Ball and Stick';
                 }
                 this.state.molecules = new Map;
+                this.state.activeKey = undefined;
 
 
         }
@@ -489,8 +493,8 @@ class chemdoodlePlot extends React.Component{
                         var keys = Array.from(this.state.molecules.keys());
                         console.log('hello', keys);
                         var tempState = {...this.state}
-                        var controlDiv = React.createElement('div', {'className': 'container'}, [
-                                React.createElement(reactDropdown, {'name':'Complex', 'items':keys, 'cb':this.cb.bind(this), 'style':{'flex':1}}, null)
+                        var controlDiv = React.createElement('div', {'className': 'container', 'style':{'flex':1, 'maxWidth':'20vw', 'minWidth':'5vw'}}, [
+                                React.createElement(reactDropdown, {'name':'Complex', 'items':keys, 'cb':this.cb.bind(this)}, null)
                         ]);
                         return controlDiv;
                } else {
@@ -509,11 +513,19 @@ class chemdoodlePlot extends React.Component{
                         canvas.style.flex=1;
                         plotContainer.appendChild(canvas);
                         //create chemdoodle canvas
-                        var doodlecanvas = new ChemDoodle.TransformCanvas3D(this.state.id+'_canvas', parseInt(window.innerWidth*0.4), parseInt(window.innerHeight*0.4));
+                        var doodlecanvas = new ChemDoodle.TransformCanvas3D(this.state.id+'_canvas', parseInt(window.innerWidth*0.6), parseInt(window.innerHeight*0.6));
                         
+                        //Add listener to resize canvas if viewport resizes
+                        window.addEventListener('resize', function () {
+                                doodlecanvas.resize(parseInt(window.innerWidth*0.6), parseInt(window.innerHeight*0.6));
+                                
+                        });
+
                         //set canvas styles and what not
                         doodlecanvas.styles.set3DRepresentation(this.state.canvasType);
-                        doodlecanvas.styles.backgroundColor = 'black';
+                        doodlecanvas.styles.backgroundColor = undefined;
+                        doodlecanvas.styles.atoms_displayLabels_3D = true;
+                        doodlecanvas.styles.outline_3D = true;
                         doodlecanvas.emptyMessage='No Data Loaded!';
                         doodlecanvas.repaint();
                         tempState.canvas = doodlecanvas;
@@ -540,11 +552,39 @@ class chemdoodlePlot extends React.Component{
                 this.renderCanvas()
         }
 
-        //callback function
+        //callback function to get which complex 
         cb(key){
+                var tempState = {...this.state}
                 var doodlecanvas = this.state.canvas
                 doodlecanvas.loadMolecule(this.state.molecules.get(key));
+                tempState.activeKey = key
+                this.setState(tempState);
+        }
+
+        selectAtoms(atomIdArray){
+                //Takes in an array of atomIds
+                var canvas = this.state.canvas;
+                var mol = this.state.molecules.get(this.state.activeKey);
                 
+                var selectStyle = canvas.styles.copy();
+                var defaultStyle = canvas.styles.copy();
+                //set custom styles
+                selectStyle.atoms_useJMOLColors = false;
+                selectStyle.atoms_color = 'purple';
+                selectStyle.outline_thickness=5;
+                //selectStyle.atoms_displayLabels_3D = true;
+                //selectStyle.outline_3D = true;
+                for (var i = 0; i < mol.atoms.length; i++){
+                        var a = mol.atoms[i];
+                        if (atomIdArray.includes(i)) {
+                                a.styles = selectStyle; 
+                                canvas.updateScene();
+                                
+                        } else {
+                                a.styles = defaultStyle;
+                        }
+                }
+                canvas.repaint();
         }
         
         render() {
@@ -553,9 +593,6 @@ class chemdoodlePlot extends React.Component{
         }
 
 }
-
-
-
 
 
 
@@ -590,6 +627,9 @@ controls.setRemoveList(plotList);
 controls.setPlotList(plotList);
 
 //Use jQuery to communicate with the backend
+var plotHandlerRef = new Map;
+export { plotHandlerRef };
+
 $(document).ready(function() {
 	console.log('Ready!');
 	//Get options from the other side.
@@ -627,7 +667,7 @@ $(document).ready(function() {
                                 );
 
                         }
-                        
+                        plotHandlerRef.set(json[i], plotHandler);
                         controls.setPlotHandler(json[i], plotHandler);
                 }
                 }, 
