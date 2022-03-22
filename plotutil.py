@@ -124,6 +124,8 @@ class energy_level_ievents(plugins.PluginBase):
     #dict_ passes all the necessary information into the JS portion
     
     JAVASCRIPT = """
+    //import reference to other modules
+    console.log(plotHandlerRef);
     //Register and set up the empty plugin
     mpld3.register_plugin("energylevels", EnergyLevelsPlugin);
     EnergyLevelsPlugin.prototype = Object.create(mpld3.Plugin.prototype);
@@ -150,6 +152,8 @@ class energy_level_ievents(plugins.PluginBase):
        
         var figdiv = d3.select('#'+this.fig.figid)
                                         .attr("class", "plotdiv")
+                                        .style('display', 'flex')
+                                        .style('flex-direction', 'row')
 
         //var eleveldiv = d3.select(this.id).append('div', 'b')
         //                                .attr("class", "figContainer")
@@ -163,6 +167,7 @@ class energy_level_ievents(plugins.PluginBase):
                             .attr("name", "orbitalinfo")
                             .style("height", 200)
                             .style("width", "100%")
+                            .style('flex', 1)
         
         for (var i = 0; i < this.props.infolabels.length; i++) {
             var labelinfo = this.props.infolabels[i];
@@ -172,7 +177,7 @@ class energy_level_ievents(plugins.PluginBase):
                     .text(labelinfo.text) 
 
             } else {
-                infoline = infodiv.append('div')
+                var infoline = infodiv.append('div')
                     .attr("class", "infoline")
                 infoline.append("p")
                     .attr("class", "infolabel")
@@ -185,14 +190,14 @@ class energy_level_ievents(plugins.PluginBase):
 
         
                 
-        textE = d3.select("#E")
-        textocc = d3.select("#occ")
-        textvector = d3.select("#vector")
-        textspin = d3.select("#spin")
-        textbasisatoms = d3.select("#basisatoms")
-        textcenter = d3.select("#center")
-        textr2 = d3.select("#r2")
-        textbasisfuncs = d3.select("#basisfuncs")
+        var textE = d3.select("#E")
+        var textocc = d3.select("#occ")
+        var textvector = d3.select("#vector")
+        var textspin = d3.select("#spin")
+        var textbasisatoms = d3.select("#basisatoms")
+        var textcenter = d3.select("#center")
+        var textr2 = d3.select("#r2")
+        var textbasisfuncs = d3.select("#basisfuncs")
        
         function foo(event){
             console.log('click!');
@@ -238,6 +243,7 @@ class energy_level_ievents(plugins.PluginBase):
             //changeText(d);
             obj.style['stroke-width']=10;
             changeText(d);
+            highlightAtoms(d);
         }
         function offHover(obj, d){
             obj.style['stroke-width']=d.linewidth;
@@ -256,6 +262,20 @@ class energy_level_ievents(plugins.PluginBase):
             textvector.text(d.vector);
             textspin.text(d.spin);
             textbasisatoms.text(d.basisatoms);
+        }
+        function highlightAtoms(d){
+            var doodlePlot = plotHandlerRef.get('structure');
+            var returnList = []
+            for (var i = 0; i < d.basisatoms.length; i++) {
+                var vals = d.basisatoms[i].replace('(', '').replace(')', '').split(':');
+                var ind = parseInt(vals[0])-1;
+                var species = vals[1];
+                returnList.push(ind);
+            doodlePlot.selectAtoms(returnList);
+            
+                
+                
+            }
 
         }
         
