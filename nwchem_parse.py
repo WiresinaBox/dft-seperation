@@ -2,6 +2,7 @@ import os
 import sys
 import numpy as np
 import re
+import json
 
 distL2 = lambda u, v: np.sqrt(np.sum((np.array(u) - np.array(v))**2))
 def concatList2Str(inList, delimiter=''):
@@ -62,8 +63,6 @@ class nw_orbital():
     def basisatoms(self, val): self._basisatoms = val
 
 
-
-
     @property
     def center(self): return self._center
     @center.setter
@@ -86,6 +85,7 @@ class nw_orbital():
 
     
     def get_data(self):
+        """Returns a JSON serializable dictionary of all the data"""
         #print(self._parser.name)
         return {'structKey':self._parser.name,
                 'E':self._E,
@@ -93,7 +93,7 @@ class nw_orbital():
                 'vector':self._vector,
                 'basisatoms':['({}:{})'.format(atom.id, atom.species) for atom in self._basisatoms],
                 'basisfuncs':sorted([(vec, coeff, '({}:{})'.format(atom.id, atom.species), orb)for vec, coeff, atom, orb in self._basisfuncs], key = lambda x: x[2]),
-                'center':self._center,
+                'center':list(self._center),
                 'r2':self._r2,
                 'ms':self._ms,
                 'spin':self._spin,
@@ -101,8 +101,9 @@ class nw_orbital():
                 'isLUMO':self.isLUMO,
                 }
 
-    def __init__(self, vector, E=None, occ=None, basisfuncs=[], spin=None, parser=None):
+    def __init__(self, vector, E=None, occ=None, basisfuncs=[], spin=None, parser=None, center =None, r2=None, ms=None, isHOMO=False, isLUMO=False):
         self._parser=parser
+        self._structKey=parser.name
         self._E = E
         self._occ = occ
         self._vector = vector
@@ -112,14 +113,14 @@ class nw_orbital():
         for bfn, coeff, atom, orbital in basisfuncs:
             self.add_basisfunc(bfn, coeff, atom, orbital)
 
-        self._center = None #tuple
-        self._r2 = None 
-        self._ms = None #1/2, -1/2
-        self._spin = None #'up', 'down'
+        self._center = center #tuple
+        self._r2 = r2 
+        self._ms = ms #1/2, -1/2
+        self._spin = spin #'up', 'down'
 
         #metainfo
-        self.isHOMO = False
-        self.isLUMO = False
+        self.isHOMO = isHOMO
+        self.isLUMO = isLUMO
 
 
     def __repr__(self):
@@ -183,7 +184,7 @@ class nw_atom():
         elif not isinstance(id, type(None)): idList.append(id)
         if isinstance(species, (list, tuple)): speciesList.extend(species)
         elif not isinstance(species, type(None)): speciesList.append(species)
-        for aid, tup in self._distance_dict.items(): 
+        for aid, tup in self._distance_dict.items():
             a = tup['atom']
             dist = tup['dist']
             if len(idList) > 0 and a.id in idList:
@@ -212,17 +213,44 @@ class nw_atom():
         if len(returnList) == 1 and not asList: return returnList[0]
         else: return returnList 
 
-    def __init__(self, id=None, species=None, charge=None, shell_charges=None, coordinates=None, gradient_forces=None):
+    def get_data(self):
+        """Return a json serializable dictionary"""
+        data = {
+            'id'             : self._id, 
+            'species'        : self._species, 
+            'charge'         : self._charge, 
+            'shell_charges'  : self._shell_charges,
+            'coordinates'    : self._coordinates, 
+            'gradient_forces': self._gradient_forces, 
+            'orbitals_dict'  : [str(key) for key in self._orbitals_dict.keys()], #(vector, spin) : orbital
+            'neighbors'      : [a.id for a in self._neighbors], #Set of atoms
+            'distance_dict'  : {aid:dat['dist'] for aid, dat in self._distance_dict.items()}, #a.id : {'dist':dist, 'atom':atom} Have to put back the atom?
+            'partial_charge':self._charge, 
+            'shell_charges':self._shell_charges, 
+            'gradient_forces':self._gradient_forces, 
+             }
+        return data
+
+
+    def __init__(self, id=None, species=None, charge=None, coordinates=None, partial_charge=None, shell_charges= [], gradient_forces = [], orbitals_dict = None, neighbors = None, distance_dict = None):
         self._id = id
         self._species = species
         self._charge = charge
         self._shell_charges = shell_charges
         self._coordinates = coordinates
         self._gradient_forces = gradient_forces
-
-        self._orbitals_dict = dict() 
-        self._neighbors = set() #Atoms which share an orbital I think?
-        self._distance_dict = dict() #Distance to every other atom
+    
+        #If the ones in the function call default to an empty data type e.g. neighbors = set(), then it won't be local and shared with ALL instances of nw_atom
+        if isinstance(orbitals_dict, type(None)): orbitals_dict = dict()
+        if isinstance(neighbors, type(None)): neighbors = set()
+        if isinstance(distance_dict, type(None)): distance_dict = dict()
+        self._orbitals_dict = orbitals_dict
+        self._neighbors = neighbors #Atoms which share an orbital I think?
+        self._distance_dict = distance_dict #Distance to every other atom
+    
+        self._partial_charge = partial_charge #Partial charge
+        self._shell_charges = shell_charges
+        self._gradient_forces = gradient_forces #3-list
 
     def __repr__(self):
         return 'atom({},{})'.format(self._id, self._species)
@@ -570,6 +598,7 @@ class nwchem_parser():
                 if target_species in source_params:
                     params.update(source_params[target_species]) #Overwrite with more specific cases
                 update_bondList(atom, params)
+        print(bondList)
         return list(bondList) #dirty dirty type conversions
             
 
@@ -622,10 +651,125 @@ class nwchem_parser():
         cmlStr = doc.toxml()
         #print(cmlStr)
         return cmlStr
+       
+    def save_json(self, savefn=None, saveDir = None):
+        #Save a json file that can be read and re-populated later. This will also make it easier for database stuff
+        #Structure: 'atoms': [atom id: All the data atoms], 'orbitals' : {(vector, spin) : All the orbital data}, 'structure' : { all the structure data}
+        if isinstance(savefn, type(None)):
+            savefn = '{}.json'.format(self._name.partition('.json')[0])
+        if isinstance(saveDir, str):
+            savefn = '{}/{}'.format(saveDir, savefn)
+        #atoms:
+        atomDataDict = {}
+        for key, atom in self._atom_dict.items():
+            data = atom.get_data()
+            atomDataDict['({}:{})'.format(atom.id, atom.species)] = data
+        #orbitals:
+        orbitalDataDict = {}
+        for key, orbital in self._orbital_dict_alpha.items():
+            data = orbital.get_data()
+            orbitalDataDict['({},{})'.format(orbital.vector, orbital.spin)] = data
+        for key, orbital in self._orbital_dict_beta.items():
+            data = orbital.get_data()
+            orbitalDataDict['({},{})'.format(orbital.vector, orbital.spin)] = data
+        #structure data:
+        #Already covered by above sections
+        #self._atom_dict = dict()    
+        #self._orbital_dict_alpha = dict()
+        #self._orbital_dict_beta = dict()
+
+        structDataDict = {
+            'name'           : self._name,
+            'runinfo'        : self._runinfo, 
+            'nonvar_energies': self._nonvar_energies, 
+            'dft_energies'   : self._dft_energies, 
+            #'total_density'  : self._total_density, #TODO? Might not need these dictionaries as the data is now stored per atom 
+            #'spin_density'   : self._spin_density, 
+            #'gradient_dict'  : self._gradient_dict, 
+            'distance_dict'  : self._distance_dict,
+            'bond_param_dict': self._bond_param_dict, 
+            'fn'             : self.fn, 
+        }
+        #for key, val in structDataDict.items():
+        #    print(key, type(key), '|', type(val))
+        #    if isinstance(val, list):
+        #        for i in range(len(val)):
+        #            print(i, val[i], type(val[i]))
+        #    if isinstance(val, dict) and len(val) > 0:
+        #        dat = list(val.items())[0]
+        #        print(dat, type(dat))
+        saveFile = open(savefn, 'w')
+        json.dump({'atoms':atomDataDict, 'orbitals':orbitalDataDict, 'structure':structDataDict}, saveFile, indent = 1)
+
+    def load_json(self, fn):
+        #The purpose of making these save/load functions is to speed up the loading time and reduce the memory footprint
+        saveFile = open(fn, 'r')
+        jsonDict = json.load(saveFile)
+        print('hello!', jsonDict.keys())
+        #structure
+        structDict = jsonDict['structure']
+        self._name                 =structDict['name']           
+        self._runinfo              =structDict['runinfo']        
+        self._nonvar_energies      =structDict['nonvar_energies']
+        self._dft_energies         =structDict['dft_energies']   
+        self._bond_param_dict      =structDict['bond_param_dict']
+        self.fn                    =structDict['fn']             
+        distance_dict = structDict['distance_dict']
+        for ai, ajDists in distance_dict.items():
+            self._distance_dict[int(ai)] = {int(ajid):dist for ajid, dist in ajDists.items()}
+
+        #atoms
+        atomsDict = jsonDict['atoms']
+        atomsByKeyDict = {} #Useful later for orbitals
+        for key, data in atomsDict.items():
+            atom = nw_atom(
+                    id=data['id'],
+                    species=data['species'],
+                    charge=data['charge'],
+                    coordinates=data['coordinates'],
+                    partial_charge=data['partial_charge'],
+                    shell_charges=data['shell_charges'],
+                    gradient_forces = data['gradient_forces'],
+                    #neighbors = data['neighbors'], #Have to fill this in manually after all other atoms are loaded.
+                    orbitals_dict = dict(), #Fill this in later when constructing orbitals
+                    #distance_dict = {int(ajid):dist for ajid, dist in data['distance_dict'].items()} #Have to fill this in manually too
+                    )
+            #atom.neighbors = data['neighbors']
+            self._atom_dict[atom.id] = atom
+            atomsByKeyDict[key] = atom
+        #Now go back and repopulate pointers to atoms in neighbors and distance_dict
+        for key, data in atomsDict.items():
+            atom = self._atom_dict[data['id']]
+            atom.neighbors = {self._atom_dict[atomid] for atomid in data['neighbors']}
+            atom.distance_dict = {int(ajid):{'atom':self._atom_dict[int(ajid)], 'dist':dist} for ajid, dist in data['distance_dict'].items()}
         
+        orbitalsDict = jsonDict['orbitals']
+        for key, data in orbitalsDict.items():
+            #print(key)
+            #print(data)
+            orbital = nw_orbital(
+                    data['vector'],
+                    E=data['E'],
+                    occ=data['occ'],
+                    #basisatoms = set(), 
+                    #basisfuncs=[], 
+                    spin=data['spin'],
+                    parser=self, #Pass back the new parser
+                    center =data['center'],
+                    r2=data['r2'],
+                    ms=data['ms'],
+                    isHOMO=data['isHOMO'],
+                    isLUMO=data['isLUMO'],
+                    )
+            for tup in data['basisfuncs']:
+                bfn, coeff, atomKey, orbType = tup
+                atom = atomsByKeyDict[atomKey]
+                orbital.add_basisfunc(bfn, coeff, atom, orbType)
+            if orbital.spin > 0: self._orbital_dict_alpha[(orbital.vector, orbital.spin)] = orbital
+            elif orbital.spin < 0: self._orbital_dict_beta[(orbital.vector, orbital.spin)] = orbital
 
 
-    def __init__(self, fn, name=None, verbose=False):
+    def __init__(self, fn, name=None, verbose=False, forceAsJson=False):
         self._name = name
         self._runinfo = dict()
         self._atom_dict = dict()    
@@ -639,6 +783,15 @@ class nwchem_parser():
         self._distance_dict = dict()
         self._bond_param_dict = DEFAULT_BOND_PARAM_DICT.copy() 
         self.fn = fn
+        print('fn', fn)
+        if fn.endswith('.json') or forceAsJson:
+            self.load_json(fn)
+        else:
+            self.parse_nwchem_outfile(fn, verbose=verbose)
+
+
+
+    def parse_nwchem_outfile(self, fn, verbose=False,):
         inFile = open(fn, 'r')
         
         part = 'start'
@@ -715,6 +868,9 @@ class nwchem_parser():
             
             #Stats recording sections
             lineBuffer.append(line)
+
+
+
     #Put methods here to grab data from each section.
     def _jobinfo_parser(self, lines):
         """Parses the job info section."""
@@ -758,37 +914,49 @@ class nwchem_parser():
         data = []
         r = lines[0]
         r = r.split("-")
-        data.append(r[1].strip())
+        #data.append(r[1].strip())
         for line in lines[4:]:
-            atom = nw_atom()
+            #atom = nw_atom()
             dat = line.split()
             if(len(dat) < 2):
                 break
-            atom.id = dat[0]
-            atom.species = dat[1]
-            ch = dat[3]
-            atom.charge = ch
-            atom.shell_charges = dat[4:]
-            data.append(atom)
-            continue
-        self._total_density = data
+            
+            atomid = int(dat[0])
+            atom = self._atom_dict[atomid]
+
+            #atom.species = dat[1]
+            ch = float(dat[3])
+            atom.partial_charge = ch
+            atom.shell_charges = [float(val) for val in dat[4:]]
+            #data.append(atom)
+        #self._total_density = data
 
     def _spinDensity_parser(self, lines):
         data = []
         r = lines[0]
         r = r.split("-")
-        data.append(r[1].strip())
+        #data.append(r[1].strip())
         for line in lines[4:]:
-            atom = nw_atom()
+            #atom = nw_atom()
             dat = line.split()
-            if (len(dat) < 2):
+            if (len(dat) < 2) or dat[0] == 'Time': #Note, this skips the 'Time prior to 1st pass' data. Dunno if that's important
                 break
-            atom.id = dat[0]
-            atom.species = dat[1]
-            ch = dat[3]
-            atom.charge = ch
-            atom.shell_charges = dat[4:]
-            data.append(atom)
+            #atomid = int(dat[0])
+            #atom = self._atom_dict[atomid]
+            #atom.species = dat[1]
+            #ch = dat[3]
+            #atom.charge = ch
+            #atom.shell_charges = dat[4:]
+            #data.append(atom)
+            
+            atomid = int(dat[0])
+            atom = self._atom_dict[atomid]
+
+            #atom.species = dat[1]
+            ch = float(dat[3])
+            atom.partial_charge = ch
+            atom.shell_charges = [float(val) for val in dat[4:]]
+            #data.append(atom)
             continue
         self._spin_density = data
 
@@ -800,14 +968,13 @@ class nwchem_parser():
                 if not isinstance(curVect, type(None)) and int(dat[1]) != curVect:
                     #Append current orbital  
                     if orbitType == 'alpha': 
-                        O.spin= orbitType
                         self._orbital_dict_alpha[O.vector] = O
                     elif orbitType == 'beta': 
-                        O.spin = orbitType
                         self._orbital_dict_beta[O.vector] = O
                 
                 curVect = int(line[7:13].strip())
                 O = nw_orbital(curVect, parser=self)
+                O.spin= orbitType
                 O.occ =  int(float(line[17:31].replace('D', 'E'))) #TODO: Doublecheck that D->E number format is ok
                 O.E = float(line[33:48].replace('D', 'E'))
             elif line.startswith('MO Center'):
@@ -830,10 +997,8 @@ class nwchem_parser():
                     atom = self.get_atoms(id = int(p2[2]), species = p2[3])
                     O.add_basisfunc(int(p2[0]), float(p2[1]), atom, concatList2Str(p2[4:], delimiter=' '))
         if orbitType == 'alpha': 
-            O.spin= orbitType
             self._orbital_dict_alpha[O.vector] = O
         elif orbitType == 'beta': 
-            O.spin = orbitType
             self._orbital_dict_beta[O.vector] = O
 
     def _gradient_parser(self, lines):
@@ -865,6 +1030,7 @@ class nwchem_parser():
             atom.gradient_forces = [gx, gy, gz] 
             data.append(atom)
         self._gradient_dict['atoms'] = data
+
         data = []
         k = 0
         for line in lines[j:]:

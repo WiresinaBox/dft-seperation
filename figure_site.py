@@ -24,17 +24,24 @@ import os
 #parsers = {'testing1':'dummy parser1', 'testing2':'dummy parser2'}
 #fns = glob.glob('../outfiles/la-9water-3C301-3+/nwchem.out*')
 #fns = glob.glob('../outfiles/la-19water-3C301/nwchem.out*')
-try: os.mkdir('nwchem_outfiles/*')
+
+outSaveDir = 'nwchem_outfiles'
+jsonSaveDir = 'nwchem_jsonfiles'
+
+try: os.mkdir(outSaveDir)
+except: pass
+try: os.mkdir(jsonSaveDir)
 except: pass
 
-fns = glob.glob('nwchem_outfiles/*')
+#fns = glob.glob('{}/*'.format(outSaveDir))
+fns = glob.glob('{}/*'.format(jsonSaveDir)) #Will preferentially load the json save files if they exist
 if len(fns) == 0:
     print('No files found in nwchem_outfiles directory! Place some in here to be analyzed.')
 for fn in fns:
     print('Found:', fn)
 
 #parsers = {'testing1':'dummy parser1', 'testing2':'dummy parser2'}
-parserDict = {fn.split('/')[-1]:{'filename': fn} for fn in fns}
+parserDict = {fn.split('/')[-1].partition('.json')[0]:{'filename': fn} for fn in fns}
 
 
 def getParserInfoFromCall(complexList):
@@ -55,7 +62,7 @@ def getParsersFromCall(complexList):
             p = nwparse.nwchem_parser(parserInfo['filename'], name = parserKey)
             parserInfo['parser']=p #add new parser in
             returnList.append(p)
-            print(p.dft_energies)
+            p.save_json(saveDir=jsonSaveDir) #HEADS UP. DO WE WANT TO ALWAYS SAVE HERE?
     return returnList
 
 def getEnergyPlot(complexList):

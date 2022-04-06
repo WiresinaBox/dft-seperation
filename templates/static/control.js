@@ -672,7 +672,7 @@ class chemdoodlePlot extends React.Component{
         selectAtoms(structKey, atomIdArray){
 		//Autoswap to correct canvas
 		console.log(structKey, this.state.activeKey, structKey === this.state.activeKey);
-		if (structKey != this.state.activeKey){ //Autoswap to correct canvas 
+		if (structKey != this.state.activeKey){ //Autoswap to correct canvas
 			this.swapCanvas(structKey);
 
 		}
@@ -697,7 +697,8 @@ class chemdoodlePlot extends React.Component{
 			canvas.updateScene();
 		}
 
-		//Set active atoms 
+		//Set active atoms
+                console.log('atomIdArray', atomIdArray);
 		for (var i = 0; i < atomIdArray.length; i++) {
 			var a = mol.atoms[atomIdArray[i]];
 			a.styles = selectStyle; 
