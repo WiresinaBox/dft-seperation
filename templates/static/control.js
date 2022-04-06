@@ -471,6 +471,7 @@ class plotDiv extends React.Component{
 
 //Chemdoodle components
 
+
 class chemdoodlePlot extends React.Component{
         constructor(props){
                 super(props)
@@ -483,6 +484,8 @@ class chemdoodlePlot extends React.Component{
                         this.state.canvasType = 'Ball and Stick';
                 }
                 this.state.molecules = new Map;
+                this.state.energies = new Map;
+		this.state.selectedAtoms = new Map; //key : [array]
                 this.state.activeKey = undefined;
 
 
@@ -491,11 +494,82 @@ class chemdoodlePlot extends React.Component{
         renderControlDiv(){
                 if (typeof this.state.canvas !== 'undefined'){
                         var keys = Array.from(this.state.molecules.keys());
-                        console.log('hello', keys);
+                        //console.log('hello', keys);
                         var tempState = {...this.state}
-                        var controlDiv = React.createElement('div', {'className': 'container', 'style':{'flex':1, 'maxWidth':'20vw', 'minWidth':'5vw'}}, [
-                                React.createElement(reactDropdown, {'name':'Complex', 'items':keys, 'cb':this.cb.bind(this)}, null)
-                        ]);
+
+			var children = [];
+                        children.push(React.createElement(reactDropdown, {'name':'Complex', 'items':keys, 'cb':this.cb.bind(this)}, null))
+			if (typeof tempState.activeKey === 'string') {
+				children.push(React.createElement('h2', {'className':'infoheading'}, 'Complex'))
+				children.push(React.createElement('div', {'className':'infoline'},
+					[React.createElement('p', {'className': 'infotext'}, tempState.activeKey),
+					]));
+				children.push(React.createElement('h2', {'className':'infoheading'}, 'Info'))
+				//Energies
+				
+				var pairs = Object.entries(this.state.energies.get(this.state.activeKey));
+				console.log(this.state.energies);
+				for (var i = 0; i < pairs.length; i++){
+					var pair = pairs[i];
+					children.push(React.createElement('div', {'className':'infoline'},[
+						React.createElement('p', {'className': 'infolabel'}, pair[0].toString()+': '), 
+						React.createElement('p', {'className': 'infotext'},   pair[1].toString()),
+						]));
+				}
+
+				var mol = tempState.molecules.get(tempState.activeKey)
+				var rows = [];
+				
+				//children.push(React.createElement('div', {'className':'infoline'},
+				//	[React.createElement('p', {'className': 'infolabel'}, 'Total Atoms: '), 
+				//	React.createElement('p', {'className': 'infotext'},   mol.atoms.length.toString())
+				//	]));
+				rows.push(React.createElement('tr', {'key':'tableRowTot'}, [
+					React.createElement('th', {'scope':'row', 'key':'spectotal'}, 'Total'),
+					React.createElement('td', {'key':'counttotal'}, mol.atoms.length.toString()),
+				]));
+				//Count up number of atoms	
+				if (typeof mol.count === 'undefined'){
+					mol.count = {};
+					for (var i = 0; i < mol.atoms.length; i++){
+						var a = mol.atoms[i];
+						if (typeof mol.count[a.label] === 'undefined') {
+							mol.count[a.label] = 1;
+						} else {
+							mol.count[a.label] = mol.count[a.label] + 1;
+						}
+					}
+					
+				}
+				//console.log(mol.count)
+				var pairs = Object.entries(mol.count);
+				for (var i = 0; i < pairs.length; i++){
+					var pair = pairs[i];
+					rows.push(React.createElement('tr', {'key':'tableRow'+i.toString()}, [
+						React.createElement('th', {'scope':'row', 'key':'spec'+i.toString()}, pair[0].toString()),
+						React.createElement('td', {'key':'count'+i.toString()}, pair[1].toString()),
+					]));
+					//children.push(React.createElement('div', {'className':'infoline'},
+					//	[React.createElement('p', {'className': 'infolabel'}, pair[0].toString() +': '), 
+					//	React.createElement('p', {'className': 'infotext'},  + pair[1].toString())
+					//	]));
+				}
+				children.push(React.createElement('table', {'className':'table'}, [
+						React.createElement('thead', {'key':'tableHead'}, [
+							React.createElement('tr', {'key':'headerRow'}, [
+								React.createElement('th', {'scope':'row', 'key':'species'}, 'Species'),
+								React.createElement('th', {'scope':'row', 'key':'count'}, 'Count'),
+							]),
+						]),
+						React.createElement('tbody', {'key':'tableBody'}, rows)
+					
+				]));
+
+
+				
+			}
+
+                        var controlDiv = React.createElement('div', {'className': 'container', 'style':{'flex':1, 'maxWidth':'20vw', 'minWidth':'5vw'}}, children);
                         return controlDiv;
                } else {
                        return null
@@ -515,6 +589,7 @@ class chemdoodlePlot extends React.Component{
                         //create chemdoodle canvas
                         var doodlecanvas = new ChemDoodle.TransformCanvas3D(this.state.id+'_canvas', parseInt(window.innerWidth*0.6), parseInt(window.innerHeight*0.6));
                         
+			
                         //Add listener to resize canvas if viewport resizes
                         window.addEventListener('resize', function () {
                                 doodlecanvas.resize(parseInt(window.innerWidth*0.6), parseInt(window.innerHeight*0.6));
@@ -536,10 +611,34 @@ class chemdoodlePlot extends React.Component{
                 this.setState(tempState);
         }
 
-        addMoleculeXYZ(key, xyzStr){
+	addEnergies(key, energiesObj){
+		var tempState = {...this.state}
+		console.log(key, energiesObj);
+		tempState.energies.set(key, energiesObj);
+		this.setState(tempState);
+
+	}
+
+        addMoleculeCML(key, cmlStr){
                 var tempState = {...this.state}
+		//console.log(cmlStr);
+                var mol = ChemDoodle.readCML(cmlStr);
+		//console.log('reading cml', mol, typeof mol, mol[0]);
+                tempState.molecules.set(key, mol[0]);
+		tempState.selectedAtoms.set(key, new Array);
+                this.setState(tempState);
+        }
+        
+	addMoleculeXYZ(key, xyzStr){
+                var tempState = {...this.state}
+		var cmlInterp = new ChemDoodle.io.CMLInterpreter();
+		//console.log(xyzStr);
                 var mol = ChemDoodle.readXYZ(xyzStr);
-                tempState.molecules.set(key, mol);
+		var cmlMolStr = cmlInterp.write([mol]);
+		
+		//console.log('reading xyz', mol, typeof mol);
+                //console.log(cmlMolStr);
+		tempState.molecules.set(key, mol);
                 this.setState(tempState);
         }
         //wrapper function to match plotDiv
@@ -547,22 +646,38 @@ class chemdoodlePlot extends React.Component{
                 var pairs = Object.entries(json);
                 for (var i = 0; i < pairs.length; i++){
                         var pair = pairs[i];
-                        this.addMoleculeXYZ(pair[0], pair[1]);
+                        var key = pair[0];
+                        var dat = pair[1];
+			this.addMoleculeCML(key, dat.struct);
+			this.addEnergies(key, dat.dft_energies);
                 }
                 this.renderCanvas()
         }
 
         //callback function to get which complex 
         cb(key){
-                var tempState = {...this.state}
-                var doodlecanvas = this.state.canvas
-                doodlecanvas.loadMolecule(this.state.molecules.get(key));
-                tempState.activeKey = key
-                this.setState(tempState);
+		this.swapCanvas(key);
         }
+	swapCanvas(key){
+		var tempState = {...this.state}
+		var doodlecanvas = this.state.canvas
+		doodlecanvas.loadMolecule(this.state.molecules.get(key));
+		tempState.activeKey = key
+		this.setState(tempState);
 
-        selectAtoms(atomIdArray){
+	}
+
+		
+
+        selectAtoms(structKey, atomIdArray){
+		//Autoswap to correct canvas
+		console.log(structKey, this.state.activeKey, structKey === this.state.activeKey);
+		if (structKey != this.state.activeKey){ //Autoswap to correct canvas 
+			this.swapCanvas(structKey);
+
+		}
                 //Takes in an array of atomIds
+                var tempState = {...this.state}
                 var canvas = this.state.canvas;
                 var mol = this.state.molecules.get(this.state.activeKey);
                 
@@ -574,17 +689,34 @@ class chemdoodlePlot extends React.Component{
                 selectStyle.outline_thickness=5;
                 //selectStyle.atoms_displayLabels_3D = true;
                 //selectStyle.outline_3D = true;
-                for (var i = 0; i < mol.atoms.length; i++){
-                        var a = mol.atoms[i];
-                        if (atomIdArray.includes(i)) {
-                                a.styles = selectStyle; 
-                                canvas.updateScene();
-                                
-                        } else {
-                                a.styles = defaultStyle;
-                        }
-                }
-                canvas.repaint();
+               	
+		//Unselect all atoms
+		for (var i = 0; i < tempState.selectedAtoms.get(tempState.activeKey).length; i++) {
+			var a = mol.atoms[tempState.selectedAtoms.get(tempState.activeKey)[i]];
+			a.styles = defaultStyle; 
+			canvas.updateScene();
+		}
+
+		//Set active atoms 
+		for (var i = 0; i < atomIdArray.length; i++) {
+			var a = mol.atoms[atomIdArray[i]];
+			a.styles = selectStyle; 
+			canvas.updateScene();
+		}
+		tempState.selectedAtoms.set(tempState.activeKey, atomIdArray);
+		
+		//for (var i = 0; i < mol.atoms.length; i++){
+		//        var a = mol.atoms[i];
+		//        if (atomIdArray.includes(i)) {
+		//                a.styles = selectStyle; 
+		//                canvas.updateScene();
+		//                
+		//        } else {
+		//                a.styles = defaultStyle;
+		//        }
+		//}
+		canvas.repaint();
+		this.setState(tempState);
         }
         
         render() {

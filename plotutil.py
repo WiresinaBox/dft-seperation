@@ -125,7 +125,7 @@ class energy_level_ievents(plugins.PluginBase):
     
     JAVASCRIPT = """
     //import reference to other modules
-    console.log(plotHandlerRef);
+    //console.log(plotHandlerRef);
     //Register and set up the empty plugin
     mpld3.register_plugin("energylevels", EnergyLevelsPlugin);
     EnergyLevelsPlugin.prototype = Object.create(mpld3.Plugin.prototype);
@@ -164,15 +164,16 @@ class energy_level_ievents(plugins.PluginBase):
         var infodiv = figdiv
                         .append("div")
                             .attr("class", "infodiv")
-                            .attr("name", "orbitalinfo")
-                            .style("height", 200)
+                            .attr("id", "orbitalinfo")
+                            .style("height", "100%")
+                            .style("margin-top", "1em")
                             .style("width", "100%")
                             .style('flex', 1)
         
         for (var i = 0; i < this.props.infolabels.length; i++) {
             var labelinfo = this.props.infolabels[i];
             if ( labelinfo.key === 'heading') {
-                infodiv.append("h1")
+                infodiv.append("h2")
                     .attr("class", "infoheading")
                     .text(labelinfo.text) 
 
@@ -187,21 +188,30 @@ class energy_level_ievents(plugins.PluginBase):
                     .attr("id", labelinfo.key)
             }
         }
-
+        //table for basis functions
+        var orbitalTable = infodiv.append("table")
+                    .attr("class", "table table-hover")
+                    .attr("id", "basisfunctable")
+                    .style("height", 200)
+                    .style("width", "100%")
+                    .style('flex', 1)
+        var orbitalTableHeader = orbitalTable.append('thead')
+        var orbitalTableBody = orbitalTable.append('tbody')
+        orbitalTableHeader.append('th').attr('scope', 'col').text('ID')
+        orbitalTableHeader.append('th').attr('scope', 'col').text('Coeff.')
+        orbitalTableHeader.append('th').attr('scope', 'col').text('Atom')
+        orbitalTableHeader.append('th').attr('scope', 'col').text('Orbital')
         
                 
         var textE = d3.select("#E")
         var textocc = d3.select("#occ")
         var textvector = d3.select("#vector")
         var textspin = d3.select("#spin")
-        var textbasisatoms = d3.select("#basisatoms")
+        //var textbasisatoms = d3.select("#basisatoms")
         var textcenter = d3.select("#center")
         var textr2 = d3.select("#r2")
         var textbasisfuncs = d3.select("#basisfuncs")
        
-        function foo(event){
-            console.log('click!');
-        }
 
         var objList = []
 
@@ -212,6 +222,7 @@ class energy_level_ievents(plugins.PluginBase):
             line.setAttribute('select', false);
             line.addEventListener('mouseover', onHover.bind(null, line, data)); 
             line.addEventListener('mouseout', offHover.bind(null, line, data)); 
+            line.addEventListener('mousedown', onClick.bind(null, line, data)); 
         }
         //for (var i=0; i < this.props.selectMarkers.length; i++) {
         //    //var lineObj = mpld3.get_element(this.props.levelLines[i], this.fig);
@@ -243,17 +254,18 @@ class energy_level_ievents(plugins.PluginBase):
             //changeText(d);
             obj.style['stroke-width']=10;
             changeText(d);
-            highlightAtoms(d);
+            //highlightAtoms(d);
         }
         function offHover(obj, d){
             obj.style['stroke-width']=d.linewidth;
         }
         
         function onClick(obj, d){
-            console.log(obj);
+            //console.log('click', obj, d);
             changeText(d);
             obj.setAttribute('select', true);
-            obj.style['stroke-width']=d.linewidth;
+            obj.style['stroke-width']=20;
+            highlightAtoms(d);
         }
 
         function changeText(d){
@@ -261,22 +273,47 @@ class energy_level_ievents(plugins.PluginBase):
             textocc.text(d.occ);
             textvector.text(d.vector);
             textspin.text(d.spin);
-            textbasisatoms.text(d.basisatoms);
+            textcenter.text(d.center);
+            textr2.text(d.r2);
+            //textbasisatoms.text(d.basisatoms);
+            orbitalTableBody.html(""); //clear orbitals
+            for (var i = 0; i < d.basisfuncs.length; i++) {
+                var bfn = d.basisfuncs[i];
+                var row = orbitalTableBody.append('tr')
+                row.append('th').text(bfn[0]);
+                row.append('td').text(bfn[1]);
+                row.append('td').text(bfn[2]);
+                row.append('td').text(bfn[3]);
+                row.node().addEventListener("mousedown", highlightBfnAtom(row, d, bfn[2], orbitalTableBody));
+            }
+
+            
         }
+        
+        //curried function
+        function highlightBfnAtom(tr, d, atom, tableBody){
+            return function() {
+                var trArray = tableBody.selectAll('tr')[0];
+                for (var i = 0; i < trArray.length; i++) {
+                    trArray[i].setAttribute('class', null)
+                }
+                var doodlePlot = plotHandlerRef.get('structure');
+                var atomId = parseInt(atom.replace('(', '').replace(')', '').split(':')[0])-1;
+                doodlePlot.selectAtoms(d.structKey, [atomId]);
+                tr.attr('class', 'table-active');
+            }
+        }
+
         function highlightAtoms(d){
             var doodlePlot = plotHandlerRef.get('structure');
             var returnList = []
             for (var i = 0; i < d.basisatoms.length; i++) {
                 var vals = d.basisatoms[i].replace('(', '').replace(')', '').split(':');
-                var ind = parseInt(vals[0])-1;
+                var ind = parseInt(vals[0])-1; //-1 for indexing
                 var species = vals[1];
                 returnList.push(ind);
-            doodlePlot.selectAtoms(returnList);
-            
-                
-                
             }
-
+            doodlePlot.selectAtoms(d.structKey, returnList);
         }
         
 
@@ -314,7 +351,9 @@ class energy_level_ievents(plugins.PluginBase):
         self.dict_ = dict()
         
         self.infolabels=[]
-        
+       
+        #Info label formatting.
+
         self.append_infolabel('heading', 'Properties')
         
         self.append_infolabel('E','Energy')
@@ -323,7 +362,6 @@ class energy_level_ievents(plugins.PluginBase):
         
         self.append_infolabel('heading', 'Location')
         
-        self.append_infolabel('basisatoms','Basis Atoms')
         self.append_infolabel('center','Center')
         self.append_infolabel('r2', 'R^2')
         
@@ -625,6 +663,12 @@ def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0, x
         if curstyleid not in handles:
             handles[curstyleid] = A[0]
 
+    #Horizontal E = 0 line
+    ax.autoscale_view()
+    ax.autoscale(False)
+    ax.plot((-100, 100), (0,0), linestyle='--', color='k')
+
+
     if interactive:
         eventHandler.setup_data(visibleGhosts=False)
     if doPluginConnect: 
@@ -638,7 +682,8 @@ def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0, x
     #fig.canvas.mpl_connect('button_release_event', refreshwrapper)
     #eventHandler.connect_tooltip_plugin(fig)
 
-    print(handles)
+    
+    #print(handles)
     if legend:
         ax.legend(handles=list(handles.values()))
    

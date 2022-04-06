@@ -9,6 +9,7 @@ import mpld3
 from mpld3 import plugins, utils
 import json
 import glob
+import os
 #OUTLINE FOR FUTURE:
 #1. JS/Python interface: Flask
 #2. UI: React
@@ -21,29 +22,40 @@ import glob
 #4. Energy level filter by certain parameters
 
 #parsers = {'testing1':'dummy parser1', 'testing2':'dummy parser2'}
-fns = glob.glob('../outfiles/la-9water-3C301-3+/nwchem.out*')
+#fns = glob.glob('../outfiles/la-9water-3C301-3+/nwchem.out*')
+#fns = glob.glob('../outfiles/la-19water-3C301/nwchem.out*')
+try: os.mkdir('nwchem_outfiles/*')
+except: pass
+
+fns = glob.glob('nwchem_outfiles/*')
+if len(fns) == 0:
+    print('No files found in nwchem_outfiles directory! Place some in here to be analyzed.')
+for fn in fns:
+    print('Found:', fn)
+
 #parsers = {'testing1':'dummy parser1', 'testing2':'dummy parser2'}
 parserDict = {fn.split('/')[-1]:{'filename': fn} for fn in fns}
 
 
 def getParserInfoFromCall(complexList):
-    returnList=[]
+    returnDict=dict()
     for complexName in complexList:
         parserInfo = parserDict[complexName]
-        returnList.append(parserInfo)
-    return returnList
+        returnDict[complexName] = parserInfo
+    return returnDict
 
 def getParsersFromCall(complexList):
     """Returns a list of parsers from the requested string names. Will save previously generated parsers"""
     returnList = []
-    for parserInfo in getParserInfoFromCall(complexList):
+    #for parserInfo in getParserInfoFromCall(complexList):
+    for parserKey, parserInfo in getParserInfoFromCall(complexList).items():
         if 'parser' in parserInfo:
             returnList.append(parserInfo['parser'])
         else:
-            p = nwparse.nwchem_parser(parserInfo['filename'])
+            p = nwparse.nwchem_parser(parserInfo['filename'], name = parserKey)
             parserInfo['parser']=p #add new parser in
             returnList.append(p)
-
+            print(p.dft_energies)
     return returnList
 
 def getEnergyPlot(complexList):
@@ -62,9 +74,9 @@ def getEnergyLevelPlot(complexList):
     
     fig, ax = plt.subplots(1,1, figsize=(6,7), tight_layout=True)
     for i,p in enumerate(parserList):
-        orbitalList = p.get_orbitals( basisSpecies = 'La', spin='both', asList = True)
-        HOMO, LUMO = p.get_HOMO_LUMO(basisSpecies = 'La', spin='both', setFlags=True)
-        fig, ax, handles = pltu.plot_energy_level(orbitalList, fig = fig, ax = ax, xlabel='La Basis Func', interactive=True, xlevel=i)
+        orbitalList = p.get_orbitals(basisSpecies = ['La', 'S'], spin='both', asList = True, conjunction=True)
+        HOMO, LUMO = p.get_HOMO_LUMO(basisSpecies = ['La', 'S'], spin='both', setFlags=True, conjunction=True)
+        fig, ax, handles = pltu.plot_energy_level(orbitalList, fig = fig, ax = ax, xlabel='La-S\n[{}]'.format(p.name), interactive=True, xlevel=i)
     if len(parserList) > 0:
         ax.legend(handles=handles)
     
@@ -81,8 +93,9 @@ def getStructPlot(complexList):
     for i, p in enumerate(parserList):
         complexName = complexList[i]
         
-        returnDict[complexName] = p.xyz_string()
-    print(returnDict)
+        #returnDict[complexName] = p.xyz_string()
+        returnDict[complexName] = {'struct':p.cml_string(), 'dft_energies':p.dft_energies}
+    #print(returnDict)
     return json.dumps(returnDict)
 
 

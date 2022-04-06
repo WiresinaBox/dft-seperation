@@ -4,11 +4,37 @@ import numpy as np
 import re
 
 distL2 = lambda u, v: np.sqrt(np.sum((np.array(u) - np.array(v))**2))
+def concatList2Str(inList, delimiter=''):
+    if len(inList) == 0:
+        return ''
+    else:
+        text = inList[0]
+        for val in inList[1:]:
+            text += delimiter+val
+        return text
 
 
+#Default, global values for visualizing bonds
+#{'atom_species' : {'specific_atom_species': {'min_dist': 0 , 'max_dist': 1, 'max_bonds':np.inf}, 'default': {...}
+DEFAULT_BOND_PARAM_DICT = {
+        'default':{
+            'default':{'min_dist':0, 'max_dist': 5, 'max_bonds': np.inf}, 
+            'H':{'min_dist':0, 'max_dist': 2.5, 'max_bonds': 1}
+            },
+        'H':{
+            'H':{'min_dist':0, 'max_dist': 0, 'max_bonds': 0}, 
+            'default':{'min_dist':0, 'max_dist': 0, 'max_bonds': 0}
+            }, 
+
+        }
 
 class nw_orbital():
     """Contains information for each alpha/beta orbital"""
+    @property
+    def structKey(self): return self._structKey
+    @structKey.setter
+    def structKey(self, val): self._structKey = val
+    
     @property
     def E(self): return self._E
     @E.setter
@@ -60,11 +86,13 @@ class nw_orbital():
 
     
     def get_data(self):
-        return {'E':self._E,
+        #print(self._parser.name)
+        return {'structKey':self._parser.name,
+                'E':self._E,
                 'occ':self._occ,
                 'vector':self._vector,
                 'basisatoms':['({}:{})'.format(atom.id, atom.species) for atom in self._basisatoms],
-                #'basisfuncs':self._basisfuncs,
+                'basisfuncs':sorted([(vec, coeff, '({}:{})'.format(atom.id, atom.species), orb)for vec, coeff, atom, orb in self._basisfuncs], key = lambda x: x[2]),
                 'center':self._center,
                 'r2':self._r2,
                 'ms':self._ms,
@@ -73,7 +101,8 @@ class nw_orbital():
                 'isLUMO':self.isLUMO,
                 }
 
-    def __init__(self,vector, E=None, occ=None, basisfuncs=[], spin=None):
+    def __init__(self, vector, E=None, occ=None, basisfuncs=[], spin=None, parser=None):
+        self._parser=parser
         self._E = E
         self._occ = occ
         self._vector = vector
@@ -108,8 +137,6 @@ class nw_atom():
     @id.setter
     def id(self, val): self._id = val
     @property
-    def charge(self): return self._charge
-    @charge.setter
     def charge(self): return self._charge
     @charge.setter
     def charge(self, val): self._charge = val
@@ -147,7 +174,8 @@ class nw_atom():
         self._orbitals_dict[(O.vector, O.spin)] = O
         self._neighbors.update({atom for atom in O.basisatoms if atom != self})
     
-    def get_neighbors_by_dist(self, rmax = np.inf, id=None, species = None, rmin = 0, includeSelf=False):
+    def get_neighbors_by_dist(self, rmax = np.inf, id=None, species = None, rmin = 0, includeSelf=False, asList = False):
+        #Returns [{'atom':atom, 'dist':dist}]
         idList = []
         speciesList = []
         returnList = []
@@ -182,7 +210,7 @@ class nw_atom():
             if idpass and speciespass and distpass:
                 returnList.append(tup)
         if len(returnList) == 1 and not asList: return returnList[0]
-        else: return returnList
+        else: return returnList 
 
     def __init__(self, id=None, species=None, charge=None, shell_charges=None, coordinates=None, gradient_forces=None):
         self._id = id
@@ -297,21 +325,32 @@ class nwchem_parser():
     @dft_energies.setter
     def dft_energies(self, val): self._dft_energies = val
     
-    
+    #{atom.id : atom }
     @property
     def atom_dict(self): return self._atom_dict
     @atom_dict.setter
     def atom_dict(self, val): self._atom_dict = val
     
-    @property
+    #{atom.id {other_atom.id : {'dist': <float>, 'atom': other_atom} }
+    @property 
     def distance_dict(self): return self._distance_dict
     @distance_dict.setter
     def distance_dict(self, val): self._distance_dict = val
+    
+    @property #{'atom_species' : {'specific_atom_species': {'min_dist': 0 , 'max_dist': 1, 'max_bonds':np.inf}, 'default': {...}
+    def bond_param_dict(self): return self._bond_param_dict
+    @bond_param_dict.setter
+    def bond_param_dict(self, val): self._bond_param_dict = val
     
     @property
     def runinfo(self): return self._runinfo
     @runinfo.setter
     def runinfo(self, val): self._runinfo = val
+    
+    @property
+    def name(self): return self._name
+    @name.setter
+    def name(self, val): self._name = val
     
     @property
     def orbital_dict_alpha(self): return self._orbital_dict_alpha
@@ -345,8 +384,8 @@ class nwchem_parser():
             if (isinstance(HOMO, type(None)) or HOMO.E < O.E ) and O.occ == 1: HOMO = O 
             if (isinstance(LUMO, type(None)) or LUMO.E > O.E ) and O.occ == 0: LUMO = O 
         if setFlags:
-            HOMO.isHOMO=True
-            LUMO.isLUMO = True
+            if not isinstance(HOMO, type(None)): HOMO.isHOMO=True
+            if not isinstance(LUMO, type(None)): LUMO.isLUMO = True
         return HOMO, LUMO
 
     @property
@@ -354,7 +393,7 @@ class nwchem_parser():
     @gradient_dict.setter
     def gradient_dict(self, val): self._gradient_dict
     
-    def get_orbitals(self, vector=None, spin='both', basisId=None, basisSpecies = None, asList = False, conjunction=False):
+    def get_orbitals(self, vector=None, spin='both', basisId=[], basisSpecies = [], asList = False, conjunction=False):
         """Returns either a list or a dictionary of orbitals given certain conditions.
         if conjuction = True, then *all* basis function conditions must match. Otherwise only one condition has to match
         e.g. if conjunction = True, basisSpecies = 'La', then only will return orbitals where all basis functions are from lanthenide.
@@ -379,7 +418,12 @@ class nwchem_parser():
         
         if isinstance(basisSpecies, (list, tuple)): basisSpeciesList.extend(basisSpecies)
         elif not isinstance(basisSpecies, type(None)): basisSpeciesList.append(basisSpecies)
-       
+        
+        vectorSet =  set(vectorList) 
+        basisIdSet = set(basisIdList) 
+        basisSpeciesSet = set(basisSpeciesList)
+        
+        
         if asList: r = []
         else: r = {}
         for key, o in a.items():
@@ -388,22 +432,32 @@ class nwchem_parser():
             else: vectorPass = False
             
             #Probably an easier way to do this...
-            if conjunction: idPass = True #all must pass or else turn to false
-            else: idPass = False #takes one truth to turn it to true always
-            if conjunction: speciesPass = True 
-            else: speciesPass = False #
+            #if conjunction: idPass = True #all must pass or else turn to false
+            #else: idPass = False #takes one truth to turn it to true always
+            #if conjunction: speciesPass = True 
+            #else: speciesPass = False #
+
+            idSet = set([bf[2].id for bf in o.basisfuncs])
+            speciesSet = set([bf[2].species for bf in o.basisfuncs])
+            if conjunction: idPass = len(basisIdSet.difference(idSet)) == 0 #Difference of sets is null
+            else: idPass = len(idSet.intersection(basisIdSet)) > 0 #At least on intersecting element
             
-            for bfn, coeff, atom, function in o.basisfuncs:
-                if conjunction: idPass = idPass and atom.id in basisIdList #One False will make it false
-                else: idPass = idPass or atom.id in basisIdList #One truth will turn it to truth
-                if conjunction: speciesPass = speciesPass and atom.species in basisSpeciesList #One False will make it false
-                else: speciesPass = speciesPass or atom.species in basisSpeciesList #One truth will turn it to truth
+            if conjunction: speciesPass = len(basisSpeciesSet.difference(speciesSet)) == 0 #Difference of sets is null
+            else: speciesPass = len(speciesSet.intersection(set(basisSpecies))) > 0 #At least on intersecting element
+           
+            
+            #for bfn, coeff, atom, function in o.basisfuncs:
+            #    if conjunction: idPass = idPass and atom.id in basisIdList #One False will make it false
+            #    else: idPass = idPass or atom.id in basisIdList #One truth will turn it to truth
+            #    if conjunction: speciesPass = speciesPass and atom.species in basisSpeciesList #One False will make it false
+            #    else: speciesPass = speciesPass or atom.species in basisSpeciesList #One truth will turn it to truth
+           
                 
-                 
             #General cases
             if len(basisIdList) == 0: idPass = True
             if len(basisSpeciesList) == 0: speciesPass = True
             if vectorPass and idPass and speciesPass:
+                
                 if asList: r.append(o)
                 else: r[key] = o
         return r
@@ -431,6 +485,7 @@ class nwchem_parser():
         a= {(o.vector, o.spin):o for o in self._orbital_dict_alpha.values()}
         a.update({(o.vector, o.spin):o for o in self._orbital_dict_beta.values()})
         return a
+
     def get_atoms(self, id = None, species = None, asList=False):
         """Returns a list of atoms given the specified constraints. If none are given then returns all atoms."""
         idList = []
@@ -462,14 +517,116 @@ class nwchem_parser():
     def xyz_string(self):
         #Returns the .xyz atom coordinate format. Chemdoodle should be able to infer covalent bonds
         outStr = '{}\n'.format(len(self._atom_dict))
-        #outStr += 'fn={}, date={}, prefix={}\n'.format(self.fn, self._runinfo['date'], self._runinfo['prefix'])
-        outStr += 'testing\n'
+        outStr += 'fn={}, date={}, prefix={}\n'.format(self.fn, self._runinfo['date'], self._runinfo['prefix'])
+        #outStr += 'testing\n'
         for key, atom in self._atom_dict.items():
             outStr+='{}\n'.format(atom.xyz_string())
         return outStr
+    
+    def _create_XML_node(self, doc, tagName, textNode = None, attributes = {}):
+        #Creates an XML node <tagName attr1:val1>textNode</tagName>
+        ele = doc.createElement(tagName)
+        if isinstance(textNode, str):
+            textNode = [textNode]
+        if isinstance(textNode, (list, tuple)):
+            for i, val in enumerate(textNode):
+                textNode = doc.createTextNode(val)
+                ele.appendChild(textNode)
+        for key, val in attributes.items():
+            ele.setAttribute(key, val)
+        return ele 
+
+    def get_bonds(self, bond_param_dict={}):
+        #Retrieves all bonds based on the criteria set by the param_dict
+        atom_species_set = {atom.species for atom in self.atom_dict.values()}
+        bond_param_dict=bond_param_dict.copy()
+        bond_param_dict.update(self.bond_param_dict) 
+        bondList= set() #[set(a1.id, a2.id)]
+        def update_bondList(atom, params):
+            rmax = params['max_dist']
+            if 'min_dist' in params: rmin = params['min_dist']
+            else: rmin = 0
+            if 'id' in params: idList = params['id'] #Can be a list
+            else: idList = None
+            if 'species' in params: speciesList = params['species']
+            else: speciesList = None
+            neighborsList = atom.get_neighbors_by_dist(rmax, rmin=rmin, id = idList, species = speciesList, asList=True)
+            #[{'atom': atom, 'dist':dist}]
+            bondList.update(set([(atom.id, tup['atom'].id) for tup in neighborsList]))
+
+        for atomid, atom in self._atom_dict.items():
+            #Source Atom
+            if atom.species in bond_param_dict: 
+                source_params = bond_param_dict[atom.species]
+            else:
+                source_params = bond_param_dict['default']
+            #Target Atom
+            for target_species in atom_species_set:
+                if 'default' in source_params:
+                    params=source_params['default'].copy()
+                else:
+                    params=bond_param_dict['default']['default'].copy()
+                params.update({'species': target_species}) #Overwrite with more specific cases
+                if target_species in source_params:
+                    params.update(source_params[target_species]) #Overwrite with more specific cases
+                update_bondList(atom, params)
+        return list(bondList) #dirty dirty type conversions
             
 
-    def __init__(self, fn, verbose=False):
+
+    def cml_string(self, **kwargs):
+        import time
+        from xml.dom.minidom import getDOMImplementation
+        dom = getDOMImplementation()
+        doc = dom.createDocument('cml', 'cml', None)
+        topNode = doc.documentElement #top level node
+        topNode.setAttribute('xmlns',"http://www.xml-cml.org/schema")
+        topNode.setAttribute('xmlns:dc',"http://purl.org/dc/elements/1.1/")
+        topNode.setAttribute('xmlns:conventions',"http://www.xml-cml.org/convention/")
+        topNode.setAttribute('convention',"conventions:molecular")
+
+        #Structure info
+        if isinstance(self._name, str): title = self._name 
+        else: title = self.fn
+        if 'date' in self._runinfo: date = self._runinfo['date']
+        else: date = time.asctime()
+        topNode.appendChild(self._create_XML_node(doc, 'dc:title', textNode='Structure of {}'.format(title)))
+        topNode.appendChild(self._create_XML_node(doc, 'dc:description', textNode=''))
+        topNode.appendChild(self._create_XML_node(doc, 'dc:author', textNode=''))
+        topNode.appendChild(self._create_XML_node(doc, 'dc:rights', textNode=''))
+        topNode.appendChild(self._create_XML_node(doc, 'dc:date', textNode='{}'.format(date)))
+        molNode = self._create_XML_node(doc, 'molecule', attributes={'id':title})
+        atomArrayNode = self._create_XML_node(doc, 'atomArray')
+        for key, atom in self._atom_dict.items():
+            atomNode = self._create_XML_node(doc, 'atom', attributes={
+                'id':str(atom.id),
+                'x3':str(atom.coordinates[0]),
+                'y3':str(atom.coordinates[1]),
+                'z3':str(atom.coordinates[2]),
+                'elementType':str(atom.species),
+                })
+            atomArrayNode.appendChild(atomNode)
+        molNode.appendChild(atomArrayNode)
+        bondArrayNode = self._create_XML_node(doc, 'bondArray')
+        bondList = self.get_bonds(**kwargs)
+        for i, bond in enumerate(bondList):
+            bondNode = self._create_XML_node(doc, 'bond', attributes={
+                'id':'dist_bond_{}'.format(i),
+                'atomRefs2':'{} {}'.format(bond[0],bond[1]),
+                'order':'1', #1 for single bond, 2 for double ..
+            })
+            bondArrayNode.appendChild(bondNode)
+        molNode.appendChild(bondArrayNode)
+        topNode.appendChild(molNode)
+       
+        cmlStr = doc.toxml()
+        #print(cmlStr)
+        return cmlStr
+        
+
+
+    def __init__(self, fn, name=None, verbose=False):
+        self._name = name
         self._runinfo = dict()
         self._atom_dict = dict()    
         self._orbital_dict_alpha = dict()
@@ -480,6 +637,7 @@ class nwchem_parser():
         self._spin_density = dict()
         self._gradient_dict = dict()
         self._distance_dict = dict()
+        self._bond_param_dict = DEFAULT_BOND_PARAM_DICT.copy() 
         self.fn = fn
         inFile = open(fn, 'r')
         
@@ -569,6 +727,7 @@ class nwchem_parser():
             if dat[0].strip() == 'ga revision': self._runinfo['GA_revision'] = dat[2]
             if dat[0].strip() == 'prefix': self._runinfo['prefix'] = dat[2]
         print(self._runinfo)
+
     def _geo_parser(self, lines):
         for line in lines[5:]:
             dat = line.split()
@@ -648,7 +807,7 @@ class nwchem_parser():
                         self._orbital_dict_beta[O.vector] = O
                 
                 curVect = int(line[7:13].strip())
-                O = nw_orbital(curVect)
+                O = nw_orbital(curVect, parser=self)
                 O.occ =  int(float(line[17:31].replace('D', 'E'))) #TODO: Doublecheck that D->E number format is ok
                 O.E = float(line[33:48].replace('D', 'E'))
             elif line.startswith('MO Center'):
@@ -666,10 +825,10 @@ class nwchem_parser():
                 #print('p2:',p2)
                 if len(p1) > 0:
                     atom = self.get_atoms(id = int(p1[2]), species = p1[3])
-                    O.add_basisfunc(int(p1[0]), float(p1[1]), atom, p1[4])
+                    O.add_basisfunc(int(p1[0]), float(p1[1]), atom, concatList2Str(p1[4:], delimiter=' '))
                 if len(p2) > 0:
                     atom = self.get_atoms(id = int(p2[2]), species = p2[3])
-                    O.add_basisfunc(int(p2[0]), float(p2[1]), atom, p2[4])
+                    O.add_basisfunc(int(p2[0]), float(p2[1]), atom, concatList2Str(p2[4:], delimiter=' '))
         if orbitType == 'alpha': 
             O.spin= orbitType
             self._orbital_dict_alpha[O.vector] = O

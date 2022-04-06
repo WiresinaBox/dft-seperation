@@ -49,9 +49,9 @@ def execute_query(connection, query):
     except Error as err:
         print(f"Error: '{err}'")
 
-host = ""
-b = ""
-pw = ""
+host = "%"
+b = "esuwandi"
+pw = "Xsedeethan2"
 db = "xsede"
 
 connection = create_db_connection(host, b, pw, db)
