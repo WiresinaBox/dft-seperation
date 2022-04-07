@@ -59,8 +59,11 @@ class plotAPI(Resource):
 
     def post(self):
         req = json.loads(request.get_data().decode()) #Bytes to string
-        plotTypeList = req['plotType'] #A list of requests
-        complexList = req['complexList']
+        plotTypeList = req['plotType'] #A list of plot types
+        complexList = req['complexList'] #A list of complexes to plot
+        speciesStr = req['orbitalSpecies'] #A string of species to filter the orbitals by, sperated by commas
+        viewSize = req['viewSize'] #A string of species to filter the orbitals by, sperated by commas
+        orbitalSpecies = [val.strip().capitalize() for val in speciesStr.split(',')] 
         if not isinstance(plotTypeList, list):
             plotTypeList = [plotTypeList]
 
@@ -70,7 +73,7 @@ class plotAPI(Resource):
             plotTypeList = list(plotFuncDict.keys())     
         for plotType in plotTypeList:
             if plotType in plotFuncDict:
-                data = plotFuncDict[plotType](complexList)
+                data = plotFuncDict[plotType](complexList, orbitalSpecies=orbitalSpecies, viewSize = viewSize)
                 dataDict[plotType] = data
 
         #if plotType == 'energy':

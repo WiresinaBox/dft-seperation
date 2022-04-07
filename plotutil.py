@@ -103,7 +103,7 @@ class replace_ticks(plugins.PluginBase):
             self._yticks.extend([str(int(np.ceil(float(val)))) for val in self._yticks])
             self._xticklabels.extend(self._xticklabels)
             self._yticklabels.extend(self._yticklabels)
-            print(self._xticks)
+            #print(self._xticks)
         self.dict_=dict()
         
         self._setup()
@@ -114,7 +114,7 @@ class replace_ticks(plugins.PluginBase):
                 'xticks' : list(zip(self._xticks, self._xticklabels)), 
                 'yticks' : list(zip(self._yticks, self._yticklabels)) 
                 }
-        print(self.dict_)
+        #print(self.dict_)
 
 class energy_level_ievents(plugins.PluginBase):
     """Holds all the references for energy levels and stuff for use with the interaction portion"""
@@ -125,7 +125,7 @@ class energy_level_ievents(plugins.PluginBase):
     
     JAVASCRIPT = """
     //import reference to other modules
-    console.log(plotHandlerRef);
+    //console.log(plotHandlerRef);
     //Register and set up the empty plugin
     mpld3.register_plugin("energylevels", EnergyLevelsPlugin);
     EnergyLevelsPlugin.prototype = Object.create(mpld3.Plugin.prototype);
@@ -164,15 +164,16 @@ class energy_level_ievents(plugins.PluginBase):
         var infodiv = figdiv
                         .append("div")
                             .attr("class", "infodiv")
-                            .attr("name", "orbitalinfo")
-                            .style("height", 200)
+                            .attr("id", "orbitalinfo")
+                            .style("height", "100%")
+                            .style("margin-top", "1em")
                             .style("width", "100%")
                             .style('flex', 1)
         
         for (var i = 0; i < this.props.infolabels.length; i++) {
             var labelinfo = this.props.infolabels[i];
             if ( labelinfo.key === 'heading') {
-                infodiv.append("h1")
+                infodiv.append("h2")
                     .attr("class", "infoheading")
                     .text(labelinfo.text) 
 
@@ -187,21 +188,31 @@ class energy_level_ievents(plugins.PluginBase):
                     .attr("id", labelinfo.key)
             }
         }
-
+        //table for basis functions
+        var orbitalTable = infodiv.append("table")
+                    .attr("class", "table table-hover")
+                    .attr("id", "basisfunctable")
+                    .style("height", 200)
+                    .style("width", "100%")
+                    .style('flex', 1)
+        var orbitalTableHeader = orbitalTable.append('thead')
+        var orbitalTableBody = orbitalTable.append('tbody')
+        orbitalTableHeader.append('th').attr('scope', 'col').text('ID')
+        orbitalTableHeader.append('th').attr('scope', 'col').text('Coeff.')
+        orbitalTableHeader.append('th').attr('scope', 'col').text('Atom')
+        orbitalTableHeader.append('th').attr('scope', 'col').text('Orbital')
+        orbitalTableHeader.append('th').attr('scope', 'col').text('Partial Charge')
         
                 
         var textE = d3.select("#E")
         var textocc = d3.select("#occ")
         var textvector = d3.select("#vector")
         var textspin = d3.select("#spin")
-        var textbasisatoms = d3.select("#basisatoms")
+        //var textbasisatoms = d3.select("#basisatoms")
         var textcenter = d3.select("#center")
         var textr2 = d3.select("#r2")
         var textbasisfuncs = d3.select("#basisfuncs")
        
-        function foo(event){
-            console.log('click!');
-        }
 
         var objList = []
 
@@ -212,6 +223,7 @@ class energy_level_ievents(plugins.PluginBase):
             line.setAttribute('select', false);
             line.addEventListener('mouseover', onHover.bind(null, line, data)); 
             line.addEventListener('mouseout', offHover.bind(null, line, data)); 
+            line.addEventListener('mousedown', onClick.bind(null, line, data)); 
         }
         //for (var i=0; i < this.props.selectMarkers.length; i++) {
         //    //var lineObj = mpld3.get_element(this.props.levelLines[i], this.fig);
@@ -242,18 +254,20 @@ class energy_level_ievents(plugins.PluginBase):
         function onHover(obj, d){
             //changeText(d);
             obj.style['stroke-width']=10;
+            obj.style['cursor']='pointer';
             changeText(d);
-            highlightAtoms(d);
+            //highlightAtoms(d);
         }
         function offHover(obj, d){
             obj.style['stroke-width']=d.linewidth;
         }
         
         function onClick(obj, d){
-            console.log(obj);
+            //console.log('click', obj, d);
             changeText(d);
             obj.setAttribute('select', true);
-            obj.style['stroke-width']=d.linewidth;
+            obj.style['stroke-width']=20;
+            highlightAtoms(d);
         }
 
         function changeText(d){
@@ -261,22 +275,48 @@ class energy_level_ievents(plugins.PluginBase):
             textocc.text(d.occ);
             textvector.text(d.vector);
             textspin.text(d.spin);
-            textbasisatoms.text(d.basisatoms);
+            textcenter.text(d.center);
+            textr2.text(d.r2);
+            //textbasisatoms.text(d.basisatoms);
+            orbitalTableBody.html(""); //clear orbitals
+            for (var i = 0; i < d.basisfuncs.length; i++) {
+                var bfn = d.basisfuncs[i];
+                var row = orbitalTableBody.append('tr')
+                row.append('th').text(bfn[0]);
+                row.append('td').text(bfn[1]);
+                row.append('td').text(bfn[2]);
+                row.append('td').text(bfn[3]);
+                row.append('td').text(bfn[4]);
+                row.node().addEventListener("mousedown", highlightBfnAtom(row, d, bfn[2], orbitalTableBody));
+            }
+
+            
         }
+        
+        //curried function
+        function highlightBfnAtom(tr, d, atom, tableBody){
+            return function() {
+                var trArray = tableBody.selectAll('tr')[0];
+                for (var i = 0; i < trArray.length; i++) {
+                    trArray[i].setAttribute('class', null)
+                }
+                var doodlePlot = plotHandlerRef.get('structure');
+                var atomId = parseInt(atom.replace('(', '').replace(')', '').split(':')[0])-1;
+                doodlePlot.selectAtoms(d.structKey, [atomId]);
+                tr.attr('class', 'table-active');
+            }
+        }
+
         function highlightAtoms(d){
             var doodlePlot = plotHandlerRef.get('structure');
             var returnList = []
             for (var i = 0; i < d.basisatoms.length; i++) {
                 var vals = d.basisatoms[i].replace('(', '').replace(')', '').split(':');
-                var ind = parseInt(vals[0])-1;
+                var ind = parseInt(vals[0])-1; //-1 for indexing
                 var species = vals[1];
                 returnList.push(ind);
-            doodlePlot.selectAtoms(returnList);
-            
-                
-                
             }
-
+            doodlePlot.selectAtoms(d.structKey, returnList);
         }
         
 
@@ -314,7 +354,9 @@ class energy_level_ievents(plugins.PluginBase):
         self.dict_ = dict()
         
         self.infolabels=[]
-        
+       
+        #Info label formatting.
+
         self.append_infolabel('heading', 'Properties')
         
         self.append_infolabel('E','Energy')
@@ -323,7 +365,6 @@ class energy_level_ievents(plugins.PluginBase):
         
         self.append_infolabel('heading', 'Location')
         
-        self.append_infolabel('basisatoms','Basis Atoms')
         self.append_infolabel('center','Center')
         self.append_infolabel('r2', 'R^2')
         
@@ -419,7 +460,7 @@ class energy_level_ievents(plugins.PluginBase):
             #self.dict_['spinMarkers'].append(utils.get_id(spins))
             #self.dict_['selectMarkers'].append(utils.get_id(ghost))
             self.dict_['levelLines'].append(utils.get_id(a, suffix))
-            dat = orb.get_data()
+            dat = orb.get_data(forSite=True)
             dat.update({'linewidth':a.get_linewidth(),
                         'linecolor':a.get_color(),
                         })
@@ -458,7 +499,7 @@ class energy_level_ievents(plugins.PluginBase):
         
         self._refreshcalls +=1
         line.set_color('tab:green')
-        print('{}, E : {}, atoms: {} '.format(orbital, orbital.E, orbital.basisatoms))
+        #print('{}, E : {}, atoms: {} '.format(orbital, orbital.E, orbital.basisatoms))
 
 
 def plot_atom_distances(atom, ax=None, species=None, bins=50, **kwargs):
@@ -488,32 +529,47 @@ def plot_atom_distances(atom, ax=None, species=None, bins=50, **kwargs):
     ax.legend()
     return fig, ax
 
-def plot_total_energies(parsers,  ax = None, **kwargs):
+def plot_total_energies(parsers,  ax = None, viewSize = (1000, 1000), dpi=72, **kwargs):
     """takes in a list of nwchem parsers"""
-    if isinstance(ax, type(None)): fig, ax = plt.subplots(1,1)
+    if isinstance(ax, type(None)): fig, ax = plt.subplots(1,1, figsize=tuple(np.array(viewSize)/dpi), tight_layout=True)
     else: fig = ax.figure
 
     if isinstance(parsers, nwparse.nwchem_parser):
         parsers = [parsers]
-    xvals = []
-    yvals = []
+    dataDict = {}
+    xticks = []
+    xticklabels = []
     for i, parser in enumerate(parsers):
-        try:
-            yvals.append(parser.dft_energies['total'])
-            xvals.append(i)
-        except KeyError:
-            continue
-    print(xvals, yvals)
-    ax.plot(xvals, yvals, **kwargs)
-    
+        xticks.append(i)
+        xticklabels.append(parser.name)
+        energyDict = parser.dft_energies   
+        for key, val in energyDict.items():
+            if 'Total iterative time' in key: continue #ignore the time component
+            if key in dataDict:
+                dataDict[key].append(val)
+            else:
+                dataDict[key] = [val]
+    for key, valList in dataDict.items():
+        if key == 'Total DFT energy':
+            style = {'linewidth':3, 'markersize':10}
+        else: style = {}
+        line = ax.plot(xticks, valList, label = key, marker='o', **style)
+        plugins.connect(fig, plugins.PointHTMLTooltip(line[0], valList))
+
+    ax.legend()
+    ax.set_xticks(xticks)
+    ax.set_xlim((-0.5, len(parsers)-0.5)) 
+    rticks = replace_ticks(fig, ax, xticks = xticks, xticklabels = xticklabels)
+    plugins.connect(fig, rticks)
+     
     return fig, ax
 
 def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0, xlabel=None,
         conditions = [
             [{'occ':1}, {'label':'filled', 'color':'tab:blue', 'zorder':1}], 
             [{'occ':0}, {'label':'unfilled', 'color':'tab:red', 'zorder':1}],
-            [{'occ':1, 'isHOMO':True}, {'label':'HOMO', 'color':'tab:cyan', 'linewidth':4, 'zorder':2}], 
-            [{'occ':0, 'isLUMO':True}, {'label':'LUMO', 'color':'tab:pink', 'linewidth':4, 'zorder':2}],
+            [{'occ':1, 'isHOMO':True}, {'label':'HOMO', 'color':'tab:cyan', 'linewidth':4, 'zorder':4}], 
+            [{'occ':0, 'isLUMO':True}, {'label':'LUMO', 'color':'tab:pink', 'linewidth':4, 'zorder':4}],
             ],
         interactive = False,
         overwriteStyle = {}
@@ -544,7 +600,7 @@ def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0, x
     if not isinstance(xlabel, type(None)):
         xticks.append(xtick)
         xlabels.append(xlabel)
-        print(xlabels, xticks) 
+        #print(xlabels, xticks) 
         ax.set_xticks(xticks)
         ax.set_xticklabels(xlabels)
 
@@ -625,6 +681,12 @@ def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0, x
         if curstyleid not in handles:
             handles[curstyleid] = A[0]
 
+    #Horizontal E = 0 line
+    ax.autoscale_view()
+    ax.autoscale(False)
+    ax.plot((-100, 100), (0,0), linestyle='--', color='k')
+
+
     if interactive:
         eventHandler.setup_data(visibleGhosts=False)
     if doPluginConnect: 
@@ -638,7 +700,8 @@ def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0, x
     #fig.canvas.mpl_connect('button_release_event', refreshwrapper)
     #eventHandler.connect_tooltip_plugin(fig)
 
-    print(handles)
+    
+    #print(handles)
     if legend:
         ax.legend(handles=list(handles.values()))
    

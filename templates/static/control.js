@@ -166,7 +166,7 @@ class complexList extends React.Component{
                 var children = [];
                 for (var i = 0; i < this.state.complexes.length; i++){
                         var data = this.state.complexes[i]
-                        children.push(listElement({'name': data.complex, 'key':`${data.complex}-${i}`, 'index':i, 'active':data.active, 'cb':this.cb.bind(this)}));
+                        children.push(listElement({'name': data.complex, 'key':`${data.complex}-${i}`, 'index':i, 'active':data.active, 'cb':this.cb.bind(this),} ));
                 }
                 return children
         }
@@ -199,7 +199,7 @@ function reactButton(props){
         if (props.active === true) {
                 active = 'active'
         }
-        return React.createElement('button', {'className':`btn ${active}`, 'key':key, 'onClick':onClick}, props.name)
+        return React.createElement('button', {'className':`btn btn-primary ${active}`, 'key':key, 'onClick':onClick, 'style':{'margin-right':'0.25em',}}, props.name)
 }
 
 //Requires: props.name, props.cb (callback function), 
@@ -374,7 +374,13 @@ class selectControls extends React.Component{
                 for (var i = 0; i < complexes.length; i++){
                         complexNames.push(complexes[i].complex);
                 }
-                var dataStr = JSON.stringify({'plotType':plotType,'complexList':complexNames});
+                var plotRow = document.getElementById('plotRow');
+                plotRow.innerHTML = '';
+                setupPlotRow(); //Reset all plots
+
+
+
+                var dataStr = JSON.stringify({'plotType':plotType,'complexList':complexNames, 'orbitalSpecies':document.getElementById('orbitalSpeciesInput').value, 'viewSize':[window.innerWidth, window.innerHeight]});
                 $.ajax({
                   method: "POST",
                   url:"/api/plots", //use this to define which api you're talking to
@@ -395,12 +401,17 @@ class selectControls extends React.Component{
 
 
         render(){
-                return(React.createElement('div', {'id':'selectControls'}, [
-                        React.createElement(reactButton, {'name':'Add', 'action':'add', 'cb':this.cb.bind(this)}, null),
-                        React.createElement(reactButton, {'name':'Remove', 'action':'remove', 'cb':this.cb.bind(this)}, null),
-                        React.createElement(reactButton, {'name':'Plot', 'action':'plot', 'cb':this.cb.bind(this)}, null),
-                        ])
-                );
+                var children = [];
+                children.push(React.createElement('div', {'key':'selectButtons', 'style':{'flex':1} }, [
+                        React.createElement(reactButton, {'key':'Add', 'name':'Add', 'action':'add', 'cb':this.cb.bind(this)}, null),
+                        React.createElement(reactButton, {'key':'Remove', 'name':'Remove', 'action':'remove', 'cb':this.cb.bind(this)}, null),
+                        React.createElement(reactButton, {'key':'Plot', 'name':'Plot', 'action':'plot', 'cb':this.cb.bind(this)}, null),
+                        ]));
+                children.push(React.createElement('div', {'key':'selectForm', 'style':{'flex':1} }, [
+                        React.createElement('input', {'key': 'species', 'id': 'orbitalSpeciesInput', 'className':'form-control', 'type':'text', 'placeholder':'Filter Orbitals by Species (Seperate by Commas)', 'defaultValue':'La, S'}, null),
+
+                        ]));
+                return(React.createElement('div', {'id':'selectControls', 'style':{'display':'flex', 'flexDirection':'column', 'style':{'padding':'0.25em'}}}, children));
         }
 }
 
@@ -471,6 +482,7 @@ class plotDiv extends React.Component{
 
 //Chemdoodle components
 
+
 class chemdoodlePlot extends React.Component{
         constructor(props){
                 super(props)
@@ -483,6 +495,8 @@ class chemdoodlePlot extends React.Component{
                         this.state.canvasType = 'Ball and Stick';
                 }
                 this.state.molecules = new Map;
+                this.state.energies = new Map;
+		this.state.selectedAtoms = new Map; //key : [array]
                 this.state.activeKey = undefined;
 
 
@@ -491,11 +505,102 @@ class chemdoodlePlot extends React.Component{
         renderControlDiv(){
                 if (typeof this.state.canvas !== 'undefined'){
                         var keys = Array.from(this.state.molecules.keys());
-                        console.log('hello', keys);
+                        //console.log('hello', keys);
                         var tempState = {...this.state}
-                        var controlDiv = React.createElement('div', {'className': 'container', 'style':{'flex':1, 'maxWidth':'20vw', 'minWidth':'5vw'}}, [
-                                React.createElement(reactDropdown, {'name':'Complex', 'items':keys, 'cb':this.cb.bind(this)}, null)
-                        ]);
+
+			var children = [];
+                        var childrenDiv1 = []; //Complex Selection Div
+                        var childrenDiv2 = []; //Energies 
+                        var childrenDiv3 = []; //Atom Count
+                        childrenDiv1.push(React.createElement(reactDropdown, {'name':'Complex', 'items':keys, 'cb':this.cb.bind(this)}, null))
+			if (typeof tempState.activeKey === 'string') {
+				childrenDiv1.push(React.createElement('h2', {'className':'infoheading'}, 'Complex'))
+				childrenDiv1.push(React.createElement('div', {'className':'infoline'},
+					[React.createElement('p', {'className': 'infotext'}, tempState.activeKey),
+					]));
+                                //children.push(React.createElement('h2', {'className':'infoheading'}, 'Info'))
+				
+                                //Energies
+				//var pairs = Object.entries(this.state.energies.get(this.state.activeKey));
+                                ////console.log(this.state.energies);
+				//for (var i = 0; i < pairs.length; i++){
+				//	var pair = pairs[i];
+				//	childrenDiv2.push(React.createElement('div', {'className':'infoline'},[
+				//		React.createElement('p', {'className': 'infolabel'}, pair[0].toString()+': '), 
+				//		React.createElement('p', {'className': 'infotext'},   pair[1].toString()),
+				//		]));
+				//}
+
+				var mol = tempState.molecules.get(tempState.activeKey)
+				
+                                var rows = [];
+                                //Create table body
+				var pairs = Object.entries(this.state.energies.get(this.state.activeKey));
+				for (var i = 0; i < pairs.length; i++){
+					var pair = pairs[i];
+					rows.push(React.createElement('tr', {'key':'tableRow'+i.toString()}, [
+						React.createElement('th', {'scope':'row', 'key':'E'+i.toString()}, pair[0].toString()),
+						React.createElement('td', {'key':'Eval'+i.toString()}, pair[1].toString()),
+					]));
+				}
+                                //Create table head + add row
+				childrenDiv2.push(React.createElement('table', {'className':'table'}, [
+						React.createElement('thead', {'key':'tableHead'}, [
+							React.createElement('tr', {'key':'headerRow'}, [
+								React.createElement('th', {'scope':'row', 'key':'species'}, 'Type'),
+								React.createElement('th', {'scope':'row', 'key':'count'}, '(Hartree, a.u.)'),
+							]),
+						]),
+						React.createElement('tbody', {'key':'tableBody'}, rows)
+				]));
+				
+				//Count up number of atoms	
+				if (typeof mol.count === 'undefined'){
+					mol.count = {};
+					for (var i = 0; i < mol.atoms.length; i++){
+						var a = mol.atoms[i];
+						if (typeof mol.count[a.label] === 'undefined') {
+							mol.count[a.label] = 1;
+						} else {
+							mol.count[a.label] = mol.count[a.label] + 1;
+						}
+					}
+					
+				}
+
+				var rows = [];
+                                //Create table body
+                                rows.push(React.createElement('tr', {'key':'tableRowTot'}, [
+					React.createElement('th', {'scope':'row', 'key':'spectotal'}, 'Total'),
+					React.createElement('td', {'key':'counttotal'}, mol.atoms.length.toString()),
+				]));
+				var pairs = Object.entries(mol.count);
+				for (var i = 0; i < pairs.length; i++){
+					var pair = pairs[i];
+					rows.push(React.createElement('tr', {'key':'tableRow'+i.toString()}, [
+						React.createElement('th', {'scope':'row', 'key':'spec'+i.toString()}, pair[0].toString()),
+						React.createElement('td', {'key':'count'+i.toString()}, pair[1].toString()),
+					]));
+				}
+                                //Create table head + add row
+				childrenDiv3.push(React.createElement('table', {'className':'table'}, [
+						React.createElement('thead', {'key':'tableHead'}, [
+							React.createElement('tr', {'key':'headerRow'}, [
+								React.createElement('th', {'scope':'row', 'key':'species'}, 'Species'),
+								React.createElement('th', {'scope':'row', 'key':'count'}, 'Count'),
+							]),
+						]),
+						React.createElement('tbody', {'key':'tableBody'}, rows)
+				]));
+
+
+				
+			}
+                        //add in all divisions
+                        children.push(React.createElement('div', {'key':'div1', 'style':{'padding':'1em'}}, childrenDiv1));
+                        children.push(React.createElement('div', {'key':'div2', 'style':{'padding':'1em'}}, childrenDiv2));
+                        children.push(React.createElement('div', {'key':'div3', 'style':{'padding':'1em'}}, childrenDiv3));
+                        var controlDiv = React.createElement('div', {'className': 'container', 'style':{'flex':1, 'display':'flex', 'maxWidth':'100vw', 'minWidth':'5vw', 'flexDirection':'row'}}, children);
                         return controlDiv;
                } else {
                        return null
@@ -513,11 +618,12 @@ class chemdoodlePlot extends React.Component{
                         canvas.style.flex=1;
                         plotContainer.appendChild(canvas);
                         //create chemdoodle canvas
-                        var doodlecanvas = new ChemDoodle.TransformCanvas3D(this.state.id+'_canvas', parseInt(window.innerWidth*0.6), parseInt(window.innerHeight*0.6));
+                        var doodlecanvas = new ChemDoodle.TransformCanvas3D(this.state.id+'_canvas', parseInt(window.innerWidth*0.8), parseInt(window.innerHeight*0.6));
                         
+			
                         //Add listener to resize canvas if viewport resizes
                         window.addEventListener('resize', function () {
-                                doodlecanvas.resize(parseInt(window.innerWidth*0.6), parseInt(window.innerHeight*0.6));
+                                doodlecanvas.resize(parseInt(window.innerWidth*0.8), parseInt(window.innerHeight*0.6));
                                 
                         });
 
@@ -536,10 +642,34 @@ class chemdoodlePlot extends React.Component{
                 this.setState(tempState);
         }
 
-        addMoleculeXYZ(key, xyzStr){
+	addEnergies(key, energiesObj){
+		var tempState = {...this.state}
+                //console.log(key, energiesObj);
+		tempState.energies.set(key, energiesObj);
+		this.setState(tempState);
+
+	}
+
+        addMoleculeCML(key, cmlStr){
                 var tempState = {...this.state}
+		//console.log(cmlStr);
+                var mol = ChemDoodle.readCML(cmlStr);
+		//console.log('reading cml', mol, typeof mol, mol[0]);
+                tempState.molecules.set(key, mol[0]);
+		tempState.selectedAtoms.set(key, new Array);
+                this.setState(tempState);
+        }
+        
+	addMoleculeXYZ(key, xyzStr){
+                var tempState = {...this.state}
+		var cmlInterp = new ChemDoodle.io.CMLInterpreter();
+		//console.log(xyzStr);
                 var mol = ChemDoodle.readXYZ(xyzStr);
-                tempState.molecules.set(key, mol);
+		var cmlMolStr = cmlInterp.write([mol]);
+		
+		//console.log('reading xyz', mol, typeof mol);
+                //console.log(cmlMolStr);
+		tempState.molecules.set(key, mol);
                 this.setState(tempState);
         }
         //wrapper function to match plotDiv
@@ -547,22 +677,38 @@ class chemdoodlePlot extends React.Component{
                 var pairs = Object.entries(json);
                 for (var i = 0; i < pairs.length; i++){
                         var pair = pairs[i];
-                        this.addMoleculeXYZ(pair[0], pair[1]);
+                        var key = pair[0];
+                        var dat = pair[1];
+			this.addMoleculeCML(key, dat.struct);
+			this.addEnergies(key, dat.dft_energies);
                 }
                 this.renderCanvas()
         }
 
         //callback function to get which complex 
         cb(key){
-                var tempState = {...this.state}
-                var doodlecanvas = this.state.canvas
-                doodlecanvas.loadMolecule(this.state.molecules.get(key));
-                tempState.activeKey = key
-                this.setState(tempState);
+		this.swapCanvas(key);
         }
+	swapCanvas(key){
+		var tempState = {...this.state}
+		var doodlecanvas = this.state.canvas
+		doodlecanvas.loadMolecule(this.state.molecules.get(key));
+		tempState.activeKey = key
+		this.setState(tempState);
 
-        selectAtoms(atomIdArray){
+	}
+
+		
+
+        selectAtoms(structKey, atomIdArray){
+		//Autoswap to correct canvas
+		//console.log(structKey, this.state.activeKey, structKey === this.state.activeKey);
+		if (structKey != this.state.activeKey){ //Autoswap to correct canvas
+			this.swapCanvas(structKey);
+
+		}
                 //Takes in an array of atomIds
+                var tempState = {...this.state}
                 var canvas = this.state.canvas;
                 var mol = this.state.molecules.get(this.state.activeKey);
                 
@@ -574,21 +720,39 @@ class chemdoodlePlot extends React.Component{
                 selectStyle.outline_thickness=5;
                 //selectStyle.atoms_displayLabels_3D = true;
                 //selectStyle.outline_3D = true;
-                for (var i = 0; i < mol.atoms.length; i++){
-                        var a = mol.atoms[i];
-                        if (atomIdArray.includes(i)) {
-                                a.styles = selectStyle; 
-                                canvas.updateScene();
-                                
-                        } else {
-                                a.styles = defaultStyle;
-                        }
-                }
-                canvas.repaint();
+               	
+		//Unselect all atoms
+		for (var i = 0; i < tempState.selectedAtoms.get(tempState.activeKey).length; i++) {
+			var a = mol.atoms[tempState.selectedAtoms.get(tempState.activeKey)[i]];
+			a.styles = defaultStyle; 
+			canvas.updateScene();
+		}
+
+		//Set active atoms
+                //console.log('atomIdArray', atomIdArray);
+		for (var i = 0; i < atomIdArray.length; i++) {
+			var a = mol.atoms[atomIdArray[i]];
+			a.styles = selectStyle; 
+			canvas.updateScene();
+		}
+		tempState.selectedAtoms.set(tempState.activeKey, atomIdArray);
+		
+		//for (var i = 0; i < mol.atoms.length; i++){
+		//        var a = mol.atoms[i];
+		//        if (atomIdArray.includes(i)) {
+		//                a.styles = selectStyle; 
+		//                canvas.updateScene();
+		//                
+		//        } else {
+		//                a.styles = defaultStyle;
+		//        }
+		//}
+		canvas.repaint();
+		this.setState(tempState);
         }
         
         render() {
-                return React.createElement('div', {'id': this.state.id, 'className': 'doodleContainer', 'style':{'display':'flex','flexDirection':'row' }}, this.renderControlDiv())
+                return React.createElement('div', {'id': this.state.id, 'className': 'doodleContainer', 'style':{'display':'flex','flexDirection':'column-reverse' }}, this.renderControlDiv())
 
         }
 
@@ -630,25 +794,14 @@ controls.setPlotList(plotList);
 var plotHandlerRef = new Map;
 export { plotHandlerRef };
 
-$(document).ready(function() {
-	console.log('Ready!');
-	//Get options from the other side.
-	$.ajax({
-	  method: "GET",
-	  url:"/api/filename", //use this to define which api you're talking to
-	  success: function (json) {
-                        availList.loadFromJson(json); 
-                }, 
-	  dataType: "html"
-	});
-	
+function setupPlotRow() {
         $.ajax({ //Gets the available plots and creates them all to sit in the background until needed
-	  method: "GET",
-	  url:"/api/plots", //use this to define which api you're talking to
-	  success: function (data) {
+          method: "GET",
+          url:"/api/plots", //use this to define which api you're talking to
+          success: function (data) {
                 var json = JSON.parse(data);
                 var plotRow = document.getElementById("plotRow")
-                console.log(json);
+                //console.log(json);
                 for (var i = 0; i < json.length; i++){
                         var container = document.createElement('div')
                         container.setAttribute('id', `plot-container-${i}`)
@@ -671,8 +824,25 @@ $(document).ready(function() {
                         controls.setPlotHandler(json[i], plotHandler);
                 }
                 }, 
+          dataType: "html"
+        });
+}
+
+
+$(document).ready(function() {
+	console.log('Ready!');
+	//Get options from the other side.
+	$.ajax({
+	  method: "GET",
+	  url:"/api/filename", //use this to define which api you're talking to
+	  success: function (json) {
+                        availList.loadFromJson(json); 
+                }, 
 	  dataType: "html"
 	});
+
+        setupPlotRow();
+	
 
 });
 
