@@ -84,15 +84,21 @@ class nw_orbital():
     def isLUMO(self): self.isLUMO = True
 
     
-    def get_data(self):
-        """Returns a JSON serializable dictionary of all the data"""
+    def get_data(self, forSite=False):
+        """Returns a JSON serializable dictionary of all the data, forSite adds extra information"""
         #print(self._parser.name)
+        if forSite:
+            basisfuncs = []
+            for vec, coeff, atom, orb in self._basisfuncs:
+                basisfuncs.append((vec, coeff, '({}:{})'.format(atom.id, atom.species), orb, atom.partial_charge))
+        else:
+            basisfuncs = [(vec, coeff, '({}:{})'.format(atom.id, atom.species), orb) for vec, coeff, atom, orb in self._basisfuncs]
         return {'structKey':self._parser.name,
                 'E':self._E,
                 'occ':self._occ,
                 'vector':self._vector,
                 'basisatoms':['({}:{})'.format(atom.id, atom.species) for atom in self._basisatoms],
-                'basisfuncs':sorted([(vec, coeff, '({}:{})'.format(atom.id, atom.species), orb)for vec, coeff, atom, orb in self._basisfuncs], key = lambda x: x[2]),
+                'basisfuncs': sorted(basisfuncs, key=lambda x:x[2]),
                 'center':list(self._center),
                 'r2':self._r2,
                 'ms':self._ms,
@@ -141,6 +147,18 @@ class nw_atom():
     def charge(self): return self._charge
     @charge.setter
     def charge(self, val): self._charge = val
+    @property
+    def partial_charge(self): return self._partial_charge
+    @partial_charge.setter
+    def partial_charge(self, val): self._partial_charge = val
+    @property
+    def spin_charge(self): return self._spin_charge
+    @spin_charge.setter
+    def spin_charge(self, val): self._spin_charge = val
+    @property
+    def shell_charge(self): return self._shell_charge
+    @shell_charge.setter
+    def shell_charge(self, val): self._shell_charge = val
     @property
     def shell_charges(self): return self._shell_charges
     @shell_charges.setter
@@ -225,14 +243,15 @@ class nw_atom():
             'orbitals_dict'  : [str(key) for key in self._orbitals_dict.keys()], #(vector, spin) : orbital
             'neighbors'      : [a.id for a in self._neighbors], #Set of atoms
             'distance_dict'  : {aid:dat['dist'] for aid, dat in self._distance_dict.items()}, #a.id : {'dist':dist, 'atom':atom} Have to put back the atom?
-            'partial_charge':self._charge, 
+            'partial_charge':self._partial_charge, 
+            'spin_charge':self._spin_charge, 
             'shell_charges':self._shell_charges, 
             'gradient_forces':self._gradient_forces, 
              }
         return data
 
 
-    def __init__(self, id=None, species=None, charge=None, coordinates=None, partial_charge=None, shell_charges= [], gradient_forces = [], orbitals_dict = None, neighbors = None, distance_dict = None):
+    def __init__(self, id=None, species=None, charge=None, coordinates=None, partial_charge=None, shell_charges= [], gradient_forces = [], orbitals_dict = None, neighbors = None, distance_dict = None, spin_charge=None,):
         self._id = id
         self._species = species
         self._charge = charge
@@ -249,6 +268,7 @@ class nw_atom():
         self._distance_dict = distance_dict #Distance to every other atom
     
         self._partial_charge = partial_charge #Partial charge
+        self._spin_charge = spin_charge #Spin charge
         self._shell_charges = shell_charges
         self._gradient_forces = gradient_forces #3-list
 
@@ -471,7 +491,7 @@ class nwchem_parser():
             else: idPass = len(idSet.intersection(basisIdSet)) > 0 #At least on intersecting element
             
             if conjunction: speciesPass = len(basisSpeciesSet.difference(speciesSet)) == 0 #Difference of sets is null
-            else: speciesPass = len(speciesSet.intersection(set(basisSpecies))) > 0 #At least on intersecting element
+            else: speciesPass = len(speciesSet.intersection(basisSpeciesSet)) > 0 #At least on intersecting element
            
             
             #for bfn, coeff, atom, function in o.basisfuncs:
@@ -598,7 +618,7 @@ class nwchem_parser():
                 if target_species in source_params:
                     params.update(source_params[target_species]) #Overwrite with more specific cases
                 update_bondList(atom, params)
-        print(bondList)
+        #print(bondList)
         return list(bondList) #dirty dirty type conversions
             
 
@@ -698,14 +718,16 @@ class nwchem_parser():
         #    if isinstance(val, dict) and len(val) > 0:
         #        dat = list(val.items())[0]
         #        print(dat, type(dat))
+        print('Saving JSON to {}'.format(savefn))
         saveFile = open(savefn, 'w')
         json.dump({'atoms':atomDataDict, 'orbitals':orbitalDataDict, 'structure':structDataDict}, saveFile, indent = 1)
-
+        return json.dumps({'atoms':atomDataDict, 'orbitals':orbitalDataDict, 'structure':structDataDict}, indent = 1)
+        
     def load_json(self, fn):
         #The purpose of making these save/load functions is to speed up the loading time and reduce the memory footprint
         saveFile = open(fn, 'r')
         jsonDict = json.load(saveFile)
-        print('hello!', jsonDict.keys())
+        #print('hello!', jsonDict.keys())
         #structure
         structDict = jsonDict['structure']
         self._name                 =structDict['name']           
@@ -783,7 +805,8 @@ class nwchem_parser():
         self._distance_dict = dict()
         self._bond_param_dict = DEFAULT_BOND_PARAM_DICT.copy() 
         self.fn = fn
-        print('fn', fn)
+        if verbose:
+            print('Creating', fn)
         if fn.endswith('.json') or forceAsJson:
             self.load_json(fn)
         else:
@@ -876,13 +899,13 @@ class nwchem_parser():
         """Parses the job info section."""
         for line in lines[2:]:
             dat = line.partition('=')
-            print(dat)
+            #print(dat)
             if dat[0].strip() == 'date': self._runinfo['date'] = dat[2]
             if dat[0].strip() == 'nwchem branch': self._runinfo['NW_branch'] = dat[2]
             if dat[0].strip() == 'nwchem revision': self._runinfo['NW_revision'] = dat[2]
             if dat[0].strip() == 'ga revision': self._runinfo['GA_revision'] = dat[2]
             if dat[0].strip() == 'prefix': self._runinfo['prefix'] = dat[2]
-        print(self._runinfo)
+        #print(self._runinfo)
 
     def _geo_parser(self, lines):
         for line in lines[5:]:
@@ -893,21 +916,27 @@ class nwchem_parser():
     def _nonvarinfo_parser(self, lines):
         for line in lines[2:-1]:
             dat = line.partition('=')
-            if dat[0].strip() == 'Total energy': self._nonvar_energies["total"] = float(dat[2])
-            if dat[0].strip() == '1-e energy': self._nonvar_energies["1e"] = float(dat[2])
-            if dat[0].strip() == '2-e energy': self._nonvar_energies["2e"] = float(dat[2])
-            if dat[0].strip() == 'HOMO': self._nonvar_energies["HOMO"] = float(dat[2]) #Highest occupied molecular orbital
-            if dat[0].strip() == 'LUMO': self._nonvar_energies["LUMO"] = float(dat[2]) #Lowest unoccupied molecular orbital
+            if dat[0].strip() in ['Total energy', '1-e energy', '2-e energy', 'HOMO', 'LUMO']:
+                self._nonvar_energies[dat[0].strip()] = float(dat[2])
+            #if dat[0].strip() == 'Total energy': self._nonvar_energies["total"] = float(dat[2])
+            #if dat[0].strip() == '1-e energy': self._nonvar_energies["1e"] = float(dat[2])
+            #if dat[0].strip() == '2-e energy': self._nonvar_energies["2e"] = float(dat[2])
+            #if dat[0].strip() == 'HOMO': self._nonvar_energies["HOMO"] = float(dat[2]) #Highest occupied molecular orbital
+            #if dat[0].strip() == 'LUMO': self._nonvar_energies["LUMO"] = float(dat[2]) #Lowest unoccupied molecular orbital
 
     def _dftenergy_parser(self, lines):
         for line in lines:
             dat = line.partition('=')
-            if dat[0].strip() == 'Total DFT energy': self._dft_energies["total"] = float(dat[2])
-            if dat[0].strip() == 'One electron energy': self._dft_energies["1e"] = float(dat[2])
-            if dat[0].strip() == 'Coulomb energy': self._dft_energies["coulomb"] = float(dat[2]) #Highest occupied molecular orbital
-            if dat[0].strip() == 'Exchange-Corr. energy': self._dft_energies["exchange-corr"] = float(dat[2])
-            if dat[0].strip() == 'Nuclear repulsion energy': self._dft_energies["nuclear-repulsion"] = float(dat[2]) 
-            if dat[0].strip() == 'Numeric. integr. energy': self._dft_energies["numeric"] = float(dat[2]) 
+            if dat[0].strip() in ['Total DFT energy', 'One electron energy', 'Coulomb energy', 'Exchange-Corr. energy', 'Nuclear repulsion energy', 'Numeric. integr. energy', 'Total iterative time']:
+                self._dft_energies[dat[0].strip()] = float(dat[2].strip('s'))
+             
+
+            #if dat[0].strip() == 'Total DFT energy': self._dft_energies["total"] = float(dat[2])
+            #if dat[0].strip() == 'One electron energy': self._dft_energies["1e"] = float(dat[2])
+            #if dat[0].strip() == 'Coulomb energy': self._dft_energies["coulomb"] = float(dat[2]) #Highest occupied molecular orbital
+            #if dat[0].strip() == 'Exchange-Corr. energy': self._dft_energies["exchange-corr"] = float(dat[2])
+            #if dat[0].strip() == 'Nuclear repulsion energy': self._dft_energies["nuclear-repulsion"] = float(dat[2]) 
+            #if dat[0].strip() == 'Numeric. integr. energy': self._dft_energies["numeric"] = float(dat[2]) 
             #if dat[0].strip() == 'Total iterative time': self._dft_energies["iteration time"] = float(dat[2]) 
                 
     def _totalDensity_parser(self, lines):
@@ -927,6 +956,7 @@ class nwchem_parser():
             #atom.species = dat[1]
             ch = float(dat[3])
             atom.partial_charge = ch
+            #print(atom, ch, atom.partial_charge)
             atom.shell_charges = [float(val) for val in dat[4:]]
             #data.append(atom)
         #self._total_density = data
@@ -954,7 +984,7 @@ class nwchem_parser():
 
             #atom.species = dat[1]
             ch = float(dat[3])
-            atom.partial_charge = ch
+            atom.spin_charge = ch
             atom.shell_charges = [float(val) for val in dat[4:]]
             #data.append(atom)
             continue

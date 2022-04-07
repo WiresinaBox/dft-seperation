@@ -103,7 +103,7 @@ class replace_ticks(plugins.PluginBase):
             self._yticks.extend([str(int(np.ceil(float(val)))) for val in self._yticks])
             self._xticklabels.extend(self._xticklabels)
             self._yticklabels.extend(self._yticklabels)
-            print(self._xticks)
+            #print(self._xticks)
         self.dict_=dict()
         
         self._setup()
@@ -114,7 +114,7 @@ class replace_ticks(plugins.PluginBase):
                 'xticks' : list(zip(self._xticks, self._xticklabels)), 
                 'yticks' : list(zip(self._yticks, self._yticklabels)) 
                 }
-        print(self.dict_)
+        #print(self.dict_)
 
 class energy_level_ievents(plugins.PluginBase):
     """Holds all the references for energy levels and stuff for use with the interaction portion"""
@@ -201,6 +201,7 @@ class energy_level_ievents(plugins.PluginBase):
         orbitalTableHeader.append('th').attr('scope', 'col').text('Coeff.')
         orbitalTableHeader.append('th').attr('scope', 'col').text('Atom')
         orbitalTableHeader.append('th').attr('scope', 'col').text('Orbital')
+        orbitalTableHeader.append('th').attr('scope', 'col').text('Partial Charge')
         
                 
         var textE = d3.select("#E")
@@ -253,6 +254,7 @@ class energy_level_ievents(plugins.PluginBase):
         function onHover(obj, d){
             //changeText(d);
             obj.style['stroke-width']=10;
+            obj.style['cursor']='pointer';
             changeText(d);
             //highlightAtoms(d);
         }
@@ -284,6 +286,7 @@ class energy_level_ievents(plugins.PluginBase):
                 row.append('td').text(bfn[1]);
                 row.append('td').text(bfn[2]);
                 row.append('td').text(bfn[3]);
+                row.append('td').text(bfn[4]);
                 row.node().addEventListener("mousedown", highlightBfnAtom(row, d, bfn[2], orbitalTableBody));
             }
 
@@ -457,7 +460,7 @@ class energy_level_ievents(plugins.PluginBase):
             #self.dict_['spinMarkers'].append(utils.get_id(spins))
             #self.dict_['selectMarkers'].append(utils.get_id(ghost))
             self.dict_['levelLines'].append(utils.get_id(a, suffix))
-            dat = orb.get_data()
+            dat = orb.get_data(forSite=True)
             dat.update({'linewidth':a.get_linewidth(),
                         'linecolor':a.get_color(),
                         })
@@ -496,7 +499,7 @@ class energy_level_ievents(plugins.PluginBase):
         
         self._refreshcalls +=1
         line.set_color('tab:green')
-        print('{}, E : {}, atoms: {} '.format(orbital, orbital.E, orbital.basisatoms))
+        #print('{}, E : {}, atoms: {} '.format(orbital, orbital.E, orbital.basisatoms))
 
 
 def plot_atom_distances(atom, ax=None, species=None, bins=50, **kwargs):
@@ -526,32 +529,47 @@ def plot_atom_distances(atom, ax=None, species=None, bins=50, **kwargs):
     ax.legend()
     return fig, ax
 
-def plot_total_energies(parsers,  ax = None, **kwargs):
+def plot_total_energies(parsers,  ax = None, viewSize = (1000, 1000), dpi=72, **kwargs):
     """takes in a list of nwchem parsers"""
-    if isinstance(ax, type(None)): fig, ax = plt.subplots(1,1)
+    if isinstance(ax, type(None)): fig, ax = plt.subplots(1,1, figsize=tuple(np.array(viewSize)/dpi), tight_layout=True)
     else: fig = ax.figure
 
     if isinstance(parsers, nwparse.nwchem_parser):
         parsers = [parsers]
-    xvals = []
-    yvals = []
+    dataDict = {}
+    xticks = []
+    xticklabels = []
     for i, parser in enumerate(parsers):
-        try:
-            yvals.append(parser.dft_energies['total'])
-            xvals.append(i)
-        except KeyError:
-            continue
-    print(xvals, yvals)
-    ax.plot(xvals, yvals, **kwargs)
-    
+        xticks.append(i)
+        xticklabels.append(parser.name)
+        energyDict = parser.dft_energies   
+        for key, val in energyDict.items():
+            if 'Total iterative time' in key: continue #ignore the time component
+            if key in dataDict:
+                dataDict[key].append(val)
+            else:
+                dataDict[key] = [val]
+    for key, valList in dataDict.items():
+        if key == 'Total DFT energy':
+            style = {'linewidth':3, 'markersize':10}
+        else: style = {}
+        line = ax.plot(xticks, valList, label = key, marker='o', **style)
+        plugins.connect(fig, plugins.PointHTMLTooltip(line[0], valList))
+
+    ax.legend()
+    ax.set_xticks(xticks)
+    ax.set_xlim((-0.5, len(parsers)-0.5)) 
+    rticks = replace_ticks(fig, ax, xticks = xticks, xticklabels = xticklabels)
+    plugins.connect(fig, rticks)
+     
     return fig, ax
 
 def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0, xlabel=None,
         conditions = [
             [{'occ':1}, {'label':'filled', 'color':'tab:blue', 'zorder':1}], 
             [{'occ':0}, {'label':'unfilled', 'color':'tab:red', 'zorder':1}],
-            [{'occ':1, 'isHOMO':True}, {'label':'HOMO', 'color':'tab:cyan', 'linewidth':4, 'zorder':2}], 
-            [{'occ':0, 'isLUMO':True}, {'label':'LUMO', 'color':'tab:pink', 'linewidth':4, 'zorder':2}],
+            [{'occ':1, 'isHOMO':True}, {'label':'HOMO', 'color':'tab:cyan', 'linewidth':4, 'zorder':4}], 
+            [{'occ':0, 'isLUMO':True}, {'label':'LUMO', 'color':'tab:pink', 'linewidth':4, 'zorder':4}],
             ],
         interactive = False,
         overwriteStyle = {}
@@ -582,7 +600,7 @@ def plot_energy_level(orbitals, fig = None, ax = None, legend=False, xlevel=0, x
     if not isinstance(xlabel, type(None)):
         xticks.append(xtick)
         xlabels.append(xlabel)
-        print(xlabels, xticks) 
+        #print(xlabels, xticks) 
         ax.set_xticks(xticks)
         ax.set_xticklabels(xlabels)
 

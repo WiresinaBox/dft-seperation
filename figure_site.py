@@ -10,6 +10,8 @@ from mpld3 import plugins, utils
 import json
 import glob
 import os
+import numpy as np
+import webbrowser
 #OUTLINE FOR FUTURE:
 #1. JS/Python interface: Flask
 #2. UI: React
@@ -34,7 +36,7 @@ try: os.mkdir(jsonSaveDir)
 except: pass
 
 #fns = glob.glob('{}/*'.format(outSaveDir))
-fns = glob.glob('{}/*'.format(jsonSaveDir)) #Will preferentially load the json save files if they exist
+fns = sorted(glob.glob('{}/*'.format(jsonSaveDir))) #Will preferentially load the json save files if they exist
 if len(fns) == 0:
     print('No files found in nwchem_outfiles directory! Place some in here to be analyzed.')
 for fn in fns:
@@ -44,14 +46,14 @@ for fn in fns:
 parserDict = {fn.split('/')[-1].partition('.json')[0]:{'filename': fn} for fn in fns}
 
 
-def getParserInfoFromCall(complexList):
+def getParserInfoFromCall(complexList, **kwargs):
     returnDict=dict()
     for complexName in complexList:
         parserInfo = parserDict[complexName]
         returnDict[complexName] = parserInfo
     return returnDict
 
-def getParsersFromCall(complexList):
+def getParsersFromCall(complexList, **kwargs):
     """Returns a list of parsers from the requested string names. Will save previously generated parsers"""
     returnList = []
     #for parserInfo in getParserInfoFromCall(complexList):
@@ -59,40 +61,55 @@ def getParsersFromCall(complexList):
         if 'parser' in parserInfo:
             returnList.append(parserInfo['parser'])
         else:
+            print('Loading: {}'.format(parserKey))
             p = nwparse.nwchem_parser(parserInfo['filename'], name = parserKey)
             parserInfo['parser']=p #add new parser in
             returnList.append(p)
-            p.save_json(saveDir=jsonSaveDir) #HEADS UP. DO WE WANT TO ALWAYS SAVE HERE?
+            #p.save_json(saveDir=jsonSaveDir) #HEADS UP. DO WE WANT TO ALWAYS SAVE HERE?
     return returnList
 
-def getEnergyPlot(complexList):
+def getEnergyPlot(complexList, viewSize = (1000, 1000), dpi=150, **kwargs):
     parserInfosList = getParserInfoFromCall(complexList)
     parserList = getParsersFromCall(complexList)#same ordering
 
-    fig, ax = pltu.plot_total_energies(parserList, label=complexList, marker='o')
+    fig, ax = pltu.plot_total_energies(parserList, label=complexList, marker='o', viewSize=viewSize, dpi=dpi)
     html = mpld3.fig_to_html(fig)
     htmlParser = pltu.mpld3HTMLParser()
     htmlParser.feed(html)
     return json.dumps(htmlParser.tagDict)
 
-def getEnergyLevelPlot(complexList):
+def getEnergyLevelPlot(complexList, orbitalSpecies=[], viewSize = (1000, 1000), dpi=150, **kwargs):
     parserInfosList = getParserInfoFromCall(complexList)
     parserList = getParsersFromCall(complexList)#same ordering
     
-    fig, ax = plt.subplots(1,1, figsize=(6,7), tight_layout=True)
+    fig, ax = plt.subplots(1,1, figsize=(viewSize[0]*0.7/dpi , viewSize[1]*1.5/dpi), tight_layout=True,)
+    
+    ylim = [np.inf, -np.inf]
     for i,p in enumerate(parserList):
-        orbitalList = p.get_orbitals(basisSpecies = ['La', 'S'], spin='both', asList = True, conjunction=True)
-        HOMO, LUMO = p.get_HOMO_LUMO(basisSpecies = ['La', 'S'], spin='both', setFlags=True, conjunction=True)
-        fig, ax, handles = pltu.plot_energy_level(orbitalList, fig = fig, ax = ax, xlabel='La-S\n[{}]'.format(p.name), interactive=True, xlevel=i)
+        orbitalListFull = p.get_orbitals(basisSpecies = None, spin='both', asList = True)
+        orbitalList = p.get_orbitals(basisSpecies = orbitalSpecies, spin='both', asList = True, conjunction=True)
+        orbitalE = [O.E for O in orbitalList]
+        if len(orbitalE) > 0:
+            ylim[0] = min(ylim[0], np.min(orbitalE))
+            ylim[1] = max(ylim[1], np.max(orbitalE))
+        
+        #Plot all orbitals underneath it but transparent
+        fig, ax,handlesFull  = pltu.plot_energy_level(orbitalListFull, fig = fig, ax = ax, interactive=False, overwriteStyle={'zorder':0, 'alpha':0.1}, xlevel = i)
+
+
+        HOMO, LUMO = p.get_HOMO_LUMO(basisSpecies = orbitalSpecies, spin='both', setFlags=True, conjunction=True)
+        fig, ax, handles = pltu.plot_energy_level(orbitalList, fig = fig, ax = ax, xlabel='{}\n[{}]'.format(str(orbitalSpecies), p.name), interactive=True, overwriteStyle={'alpha':1}, xlevel=i)
     if len(parserList) > 0:
         ax.legend(handles=handles)
-    
+    ax.set_xlim((0, len(parserList)))
+    if not np.any(np.isinf(ylim)):
+        ax.set_ylim(ylim)
     html = mpld3.fig_to_html(fig)
     htmlParser = pltu.mpld3HTMLParser()
     htmlParser.feed(html)
     return json.dumps(htmlParser.tagDict)
 
-def getStructPlot(complexList):
+def getStructPlot(complexList, **kwargs):
     parserInfosList = getParserInfoFromCall(complexList)
     parserList = getParsersFromCall(complexList)#same ordering
 
@@ -122,15 +139,15 @@ def launchSite():
     @app.route('/')
     def index():
         return flask.render_template('index.html', name='index')
-
-
     return app
 
 
 
 if __name__=='__main__':
     app = launchSite()
+    webbrowser.open('http://127.0.0.1:5000/')#Just for debug change this if you ever host the site
     app.run(debug=True)
+    
 
 
 #class siteData:
