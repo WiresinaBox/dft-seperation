@@ -302,13 +302,14 @@ class energy_level_ievents(plugins.PluginBase):
                 }
                 var doodlePlot = plotHandlerRef.get('structure');
                 var atomId = parseInt(atom.replace('(', '').replace(')', '').split(':')[0])-1;
-                doodlePlot.selectAtoms(d.structKey, [atomId]);
+                doodlePlot.selectAtoms(d.structKey, [atomId],  d.vector);
                 tr.attr('class', 'table-active');
             }
         }
 
         function highlightAtoms(d){
             var doodlePlot = plotHandlerRef.get('structure');
+            var tablePlot = plotHandlerRef.get('tableEnergy');
             var returnList = []
             for (var i = 0; i < d.basisatoms.length; i++) {
                 var vals = d.basisatoms[i].replace('(', '').replace(')', '').split(':');
@@ -316,7 +317,8 @@ class energy_level_ievents(plugins.PluginBase):
                 var species = vals[1];
                 returnList.push(ind);
             }
-            doodlePlot.selectAtoms(d.structKey, returnList);
+            doodlePlot.selectAtoms(d.structKey, returnList, d.vector);
+            tablePlot.renderTables(d.structKey);
         }
         
 
@@ -540,9 +542,10 @@ def plot_total_energies(parsers,  ax = None, viewSize = (1000, 1000), dpi=72, **
     xticks = []
     xticklabels = []
     for i, parser in enumerate(parsers):
+        energyDict = parser.dft_energies
+        print(parser.name, energyDict)
         xticks.append(i)
         xticklabels.append(parser.name)
-        energyDict = parser.dft_energies   
         for key, val in energyDict.items():
             if 'Total iterative time' in key: continue #ignore the time component
             if key in dataDict:

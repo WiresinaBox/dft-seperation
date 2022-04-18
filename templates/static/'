@@ -391,7 +391,6 @@ class selectControls extends React.Component{
                         for (var i = 0; i < plotData.length; i++){
                                 var pair = plotData[i];
                                 var plotFunc = plotFuncs.get(pair[0]); //Plottype
-                                console.log(plotFuncs);
                                 plotFunc(JSON.parse(pair[1])); //plot data
                         }
                         },
@@ -483,87 +482,6 @@ class plotDiv extends React.Component{
 
 //Chemdoodle components
 
-class tablePlot extends React.Component{
-        constructor(props) {
-                super(props)
-                this.state = {}
-                this.state.data = new Map; //'structkey':[{'label':'str', 'headers':[...data], 'data':[{'label':'rowlabel', data:[...], ...]}]
-                this.state.children = []; 
-                if (typeof props.json === 'object') {
-                        this.setHTML(props.json);
-                }
-        }
-
-        renderTables(key) {
-        //Returns list of inner children
-                var tempState = {...this.state}
-                var children = [];
-                var dataArray = this.state.data.get(key);
-                console.log('renderTables', key, dataArray);
-                if (typeof dataArray === 'undefined') {return children}
-                for (var k = 0; k < dataArray.length; k++) {
-                        var data = dataArray[k];
-                        console.log('lets go', data)
-                        //create all children and shove them into div at the end.
-                        var childrenTable = [];
-                        //var key = pair[0];
-                        //var data = pair[1];
-                        //label
-                        if (typeof data.label != 'undefined') {
-                                childrenTable.push(React.createElement('h4', {'className':'infoheading', 'key':'h4-'+k}, data.label));
-                        }
-                        //create table rows
-		        var rows = [];
-                        for (var i = 0; i < data.data.length; i++){
-                                var rowObj = data.data[i];
-                                var rowChildren = [];
-                                rowChildren.push(React.createElement('th', {'scope':'row', 'key':'th-'+k+'-'+i}, rowObj.label))
-                                for (var j = 0; j < rowObj.data.length; j++) {
-                                        rowChildren.push(React.createElement('td', {'scope':'row', 'key':'td'+k+'-'+j+'-'+k}, rowObj.data[j]));
-                                }
-                                rows.push(React.createElement('tr', {'key':'tableRow'+i.toString(), 'key':'tr'+k+'-'+i}, rowChildren));
-                        }
-                        var headers = [];
-                        for (var i = 0; i < data.headers.length; i++){
-                                var header = data.headers[i];
-                                headers.push(React.createElement('th', {'scope':'row', 'key':'header-th-'+k+'-'+i}, header))
-                                
-                        
-                        }
-                        //Create table head + add row
-                        childrenTable.push(React.createElement('table', {'className':'table'}, [
-                                        React.createElement('thead', {'key':'header-'+k}, [
-                                                React.createElement('tr', {'key':'headerRow-'+k}, headers)
-                                        ]),
-                                        React.createElement('tbody', {'key':'tableBody-'+k}, rows)
-                        ]));
-                        children.push(React.createElement('div', {'key':'tableDiv', 'style':{'paddingRight':'1em'}, 'key':'table-'+k, }, childrenTable));
-                }
-                tempState.children = children; 
-                this.setState(tempState);
-        }
-
-        setHTML(json){
-                //takes in data from the backend
-                var tempState = {...this.state}
-                var pairs = Object.entries(json);
-                for (var i = 0; i < pairs.length; i++){
-                        var pair = pairs[i];
-                        var key = pair[0];
-                        var dat = pair[1];
-                        tempState.data.set(key, dat);
-                }
-                this.setState(tempState);
-        }
-
-        render() {
-
-                return React.createElement('div', {'id': this.state.id, 'className': 'tableContainer', 'style':{'display':'flex','flexDirection':'row', 'flexWrap':'wrap' }}, this.state.children)
-
-        }
-
-}
-
 
 class chemdoodlePlot extends React.Component{
         constructor(props){
@@ -613,75 +531,75 @@ class chemdoodlePlot extends React.Component{
 				//		]));
 				//}
 
-				//var mol = tempState.molecules.get(tempState.activeKey)
-				//
-                                //var rows = [];
-                                ////Create table body
-				//var pairs = Object.entries(this.state.energies.get(this.state.activeKey));
-				//for (var i = 0; i < pairs.length; i++){
-				//	var pair = pairs[i];
-				//	rows.push(React.createElement('tr', {'key':'tableRow'+i.toString()}, [
-				//		React.createElement('th', {'scope':'row', 'key':'E'+i.toString()}, pair[0].toString()),
-				//		React.createElement('td', {'key':'Eval'+i.toString()}, pair[1].toString()),
-				//	]));
-				//}
-                                ////Create table head + add row
-				//childrenDiv2.push(React.createElement('table', {'className':'table'}, [
-				//		React.createElement('thead', {'key':'tableHead'}, [
-				//			React.createElement('tr', {'key':'headerRow'}, [
-				//				React.createElement('th', {'scope':'row', 'key':'species'}, 'Type'),
-				//				React.createElement('th', {'scope':'row', 'key':'count'}, '(Hartree, a.u.)'),
-				//			]),
-				//		]),
-				//		React.createElement('tbody', {'key':'tableBody'}, rows)
-				//]));
-				//
-				////Count up number of atoms	
-				//if (typeof mol.count === 'undefined'){
-				//	mol.count = {};
-				//	for (var i = 0; i < mol.atoms.length; i++){
-				//		var a = mol.atoms[i];
-				//		if (typeof mol.count[a.label] === 'undefined') {
-				//			mol.count[a.label] = 1;
-				//		} else {
-				//			mol.count[a.label] = mol.count[a.label] + 1;
-				//		}
-				//	}
-				//	
-				//}
+				var mol = tempState.molecules.get(tempState.activeKey)
+				
+                                var rows = [];
+                                //Create table body
+				var pairs = Object.entries(this.state.energies.get(this.state.activeKey));
+				for (var i = 0; i < pairs.length; i++){
+					var pair = pairs[i];
+					rows.push(React.createElement('tr', {'key':'tableRow'+i.toString()}, [
+						React.createElement('th', {'scope':'row', 'key':'E'+i.toString()}, pair[0].toString()),
+						React.createElement('td', {'key':'Eval'+i.toString()}, pair[1].toString()),
+					]));
+				}
+                                //Create table head + add row
+				childrenDiv2.push(React.createElement('table', {'className':'table'}, [
+						React.createElement('thead', {'key':'tableHead'}, [
+							React.createElement('tr', {'key':'headerRow'}, [
+								React.createElement('th', {'scope':'row', 'key':'species'}, 'Type'),
+								React.createElement('th', {'scope':'row', 'key':'count'}, '(Hartree, a.u.)'),
+							]),
+						]),
+						React.createElement('tbody', {'key':'tableBody'}, rows)
+				]));
+				
+				//Count up number of atoms	
+				if (typeof mol.count === 'undefined'){
+					mol.count = {};
+					for (var i = 0; i < mol.atoms.length; i++){
+						var a = mol.atoms[i];
+						if (typeof mol.count[a.label] === 'undefined') {
+							mol.count[a.label] = 1;
+						} else {
+							mol.count[a.label] = mol.count[a.label] + 1;
+						}
+					}
+					
+				}
 
-				//var rows = [];
-                                ////Create table body
-                                //rows.push(React.createElement('tr', {'key':'tableRowTot'}, [
-				//	React.createElement('th', {'scope':'row', 'key':'spectotal'}, 'Total'),
-				//	React.createElement('td', {'key':'counttotal'}, mol.atoms.length.toString()),
-				//]));
-				//var pairs = Object.entries(mol.count);
-				//for (var i = 0; i < pairs.length; i++){
-				//	var pair = pairs[i];
-				//	rows.push(React.createElement('tr', {'key':'tableRow'+i.toString()}, [
-				//		React.createElement('th', {'scope':'row', 'key':'spec'+i.toString()}, pair[0].toString()),
-				//		React.createElement('td', {'key':'count'+i.toString()}, pair[1].toString()),
-				//	]));
-				//}
-                                ////Create table head + add row
-				//childrenDiv3.push(React.createElement('table', {'className':'table'}, [
-				//		React.createElement('thead', {'key':'tableHead'}, [
-				//			React.createElement('tr', {'key':'headerRow'}, [
-				//				React.createElement('th', {'scope':'row', 'key':'species'}, 'Species'),
-				//				React.createElement('th', {'scope':'row', 'key':'count'}, 'Count'),
-				//			]),
-				//		]),
-				//		React.createElement('tbody', {'key':'tableBody'}, rows)
-				//]));
+				var rows = [];
+                                //Create table body
+                                rows.push(React.createElement('tr', {'key':'tableRowTot'}, [
+					React.createElement('th', {'scope':'row', 'key':'spectotal'}, 'Total'),
+					React.createElement('td', {'key':'counttotal'}, mol.atoms.length.toString()),
+				]));
+				var pairs = Object.entries(mol.count);
+				for (var i = 0; i < pairs.length; i++){
+					var pair = pairs[i];
+					rows.push(React.createElement('tr', {'key':'tableRow'+i.toString()}, [
+						React.createElement('th', {'scope':'row', 'key':'spec'+i.toString()}, pair[0].toString()),
+						React.createElement('td', {'key':'count'+i.toString()}, pair[1].toString()),
+					]));
+				}
+                                //Create table head + add row
+				childrenDiv3.push(React.createElement('table', {'className':'table'}, [
+						React.createElement('thead', {'key':'tableHead'}, [
+							React.createElement('tr', {'key':'headerRow'}, [
+								React.createElement('th', {'scope':'row', 'key':'species'}, 'Species'),
+								React.createElement('th', {'scope':'row', 'key':'count'}, 'Count'),
+							]),
+						]),
+						React.createElement('tbody', {'key':'tableBody'}, rows)
+				]));
 
 
 				
 			}
                         //add in all divisions
                         children.push(React.createElement('div', {'key':'div1', 'style':{'padding':'1em'}}, childrenDiv1));
-                        //children.push(React.createElement('div', {'key':'div2', 'style':{'padding':'1em'}}, childrenDiv2));
-                        //children.push(React.createElement('div', {'key':'div3', 'style':{'padding':'1em'}}, childrenDiv3));
+                        children.push(React.createElement('div', {'key':'div2', 'style':{'padding':'1em'}}, childrenDiv2));
+                        children.push(React.createElement('div', {'key':'div3', 'style':{'padding':'1em'}}, childrenDiv3));
                         var controlDiv = React.createElement('div', {'className': 'container', 'style':{'flex':1, 'display':'flex', 'maxWidth':'100vw', 'minWidth':'5vw', 'flexDirection':'row'}}, children);
                         return controlDiv;
                } else {
@@ -781,7 +699,6 @@ class chemdoodlePlot extends React.Component{
                         var pair = pairs[i];
                         var key = pair[0];
                         var dat = pair[1];
-                        console.log(key, dat);
 			this.addMoleculeCML(key, dat.struct);
 			this.addEnergies(key, dat.dft_energies);
                 }
@@ -798,37 +715,26 @@ class chemdoodlePlot extends React.Component{
                 //Set all orbital centers to not render
                 var mol = this.state.molecules.get(key);
                 console.log(mol.orbitals);
-                //swap values in the energy table
-                var tableHandler = plotHandlerRef.get('tableEnergy');
-                tableHandler.renderTables(key);
 
-                var selectOrbitalStyle = doodlecanvas.styles.copy();
-                selectOrbitalStyle.surfaces_color = 'black';
-                selectOrbitalStyle.atoms_useJMOLColors = false;
-                selectOrbitalStyle.atoms_color = 'purple';
-                
-                var newMol = new ChemDoodle.structures.Molecule();
-                for (var o of mol.orbitals.values()) {
-                        o.styles = selectOrbitalStyle;
-                        newMol.atoms.push(o);
-                        //console.log(o);
-                        //o.styles=doodlecanvas.styles.copy();
-                        //o.styles.atoms_useJMOLColors = false;
-                        //o.styles.atoms_color='white';
-                        //o.styles.atoms_useVDWDiameters_3D=true;
-                        //o.isLone=true;
-                        //o.styles.atoms_useVDWMultiplier_3D=0;
-                }
+                var orbitalArray = [];
+                var surfArray = [];
+                //for (var oObj of mol.orbitals.values()) {
+                //        orbitalArray.push(oObj.mol);
+                //        surfArray.push(oObj.surface);
+                //        console.log(oObj);
+                //        //console.log(o);
+                //        //o.styles=doodlecanvas.styles.copy();
+                //        //o.styles.atoms_useJMOLColors = false;
+                //        //o.styles.atoms_color='white';
+                //        //o.styles.atoms_useVDWDiameters_3D=true;
+                //        //o.isLone=true;
+                //        //o.styles.atoms_useVDWMultiplier_3D=0;
+                //}
                 //TODO USE loadContent([mol, mol], [shapes])
-                //var newSurf = new ChemDoodle.structures.d3.VDWSurface(newMol.atoms, 30);
-                doodlecanvas.styles.surfaces_color = 'black'
-                doodlecanvas.styles.flat_color_3D = true;
-		//doodlecanvas.loadMolecule(mol);
+		doodlecanvas.loadMolecule(mol);
                 
-		//doodlecanvas.loadContent([mol], [newSurf])
-                
-
-		doodlecanvas.loadContent([mol, newMol])
+                //doodlecanvas.loadMolecule(orbMol[0])
+		//doodlecanvas.loadContent([mol, newMol], [newSurf])
                 tempState.activeKey = key
 		this.setState(tempState);
 
@@ -854,10 +760,7 @@ class chemdoodlePlot extends React.Component{
                 var selectOrbitalStyle = canvas.styles.copy();
                 //set custom styles
                 //selectOrbitalStyle.surfaces_style = 'Mesh';
-                selectOrbitalStyle.atoms_useJMOLColors = false;
                 selectOrbitalStyle.surfaces_color = 'black';
-                selectOrbitalStyle.atoms_color = 'purple';
-                
                 //selectOrbitalStyle.atoms_vdwMultiplier_3D = 2;
                 //selectStyle.atoms_useJMOLColors = false;
                 //selectStyle.atoms_color = 'purple';
@@ -902,13 +805,13 @@ class chemdoodlePlot extends React.Component{
                         //console.log(o);
                         o.isSelected=true;
                         o.styles = selectOrbitalStyle;
-                        //canvas.styles = selectOrbitalStyle; 
+                        canvas.styles = selectOrbitalStyle; 
                         //tempState.selectedAtoms.get(tempState.activeKey).push(o);
                         var newMol = new ChemDoodle.structures.Molecule();
                         newMol.atoms[0] = o;
                         newMol.atoms[1] = o;
-                        //var newSurf = new ChemDoodle.structures.d3.VDWSurface([o], 10);
-                        canvas.loadContent([mol, newMol])
+                        var newSurf = new ChemDoodle.structures.d3.VDWSurface(newMol.atoms, 10);
+                        canvas.loadContent([mol, newMol], [newSurf])
                 }
                 canvas.updateScene();
 
@@ -978,9 +881,7 @@ function setupPlotRow() {
                 var json = JSON.parse(data);
                 var plotRow = document.getElementById("plotRow")
                 //console.log(json);
-                console.log(data, json);
                 for (var i = 0; i < json.length; i++){
-                        console.log(i, json[i]);
                         var container = document.createElement('div')
                         container.setAttribute('id', `plot-container-${i}`)
                         container.setAttribute('class', `row`)
@@ -990,11 +891,7 @@ function setupPlotRow() {
                                         React.createElement(chemdoodlePlot, {'id':json[i]}, null),
                                         container,
                                 );
-                        } else if (json[i].startsWith('table')) {
-                                var plotHandler = ReactDOM.render(
-                                        React.createElement(tablePlot, {'id':json[i]}, null),
-                                        container,
-                                );
+
                         } else {
                                 var plotHandler = ReactDOM.render(
                                         React.createElement(plotDiv, {'id':json[i]}, null),

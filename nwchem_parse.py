@@ -14,6 +14,17 @@ def concatList2Str(inList, delimiter=''):
             text += delimiter+val
         return text
 
+def list2csv(l, delim = ','):
+    if hasattr(l, '__iter__'):
+        s = '' 
+        if len(l) > 0: 
+            s = str(l[0])
+        if len(l) > 1:
+            for val in l[1:]: 
+                s+='{}{}'.format(delim, val)
+        return s
+    else: return l
+
 
 #Default, global values for visualizing bonds
 #{'atom_species' : {'specific_atom_species': {'min_dist': 0 , 'max_dist': 1, 'max_bonds':np.inf}, 'default': {...}
@@ -40,6 +51,12 @@ class nw_orbital():
     def E(self): return self._E
     @E.setter
     def E(self, val): self._E = val
+    
+    @property
+    def r2(self): return self._r2
+    @r2.setter
+    def r2(self, val): self._r2 = val
+
     @property
     def occ(self): return self._occ
     @occ.setter
@@ -93,12 +110,14 @@ class nw_orbital():
                 basisfuncs.append((vec, coeff, '({}:{})'.format(atom.id, atom.species), orb, atom.partial_charge))
         else:
             basisfuncs = [(vec, coeff, '({}:{})'.format(atom.id, atom.species), orb) for vec, coeff, atom, orb in self._basisfuncs]
+        
+        #print('r2', self._r2)
         return {'structKey':self._parser.name,
                 'E':self._E,
                 'occ':self._occ,
                 'vector':self._vector,
                 'basisatoms':['({}:{})'.format(atom.id, atom.species) for atom in self._basisatoms],
-                'basisfuncs': sorted(basisfuncs, key=lambda x:x[2]),
+                'basisfuncs': sorted(basisfuncs, key=lambda x:x[1], reverse=True),
                 'center':list(self._center),
                 'r2':self._r2,
                 'ms':self._ms,
@@ -106,6 +125,28 @@ class nw_orbital():
                 'isHOMO':self.isHOMO,
                 'isLUMO':self.isLUMO,
                 }
+
+    def get_csv(self, delim = ','):
+        """This is for human readability primarily"""
+        dataDict = self.get_data()
+        csvStr = ''
+        for key, val in sorted([item for item in dataDict.items()]):
+            if key in ['basisatoms']: 
+                valStr = '(Atom ID : Atom Species)'
+                for item in val:
+                    valStr += '\n,{}'.format(item)
+                val = valStr
+            if key in ['basisfuncs']:
+                valStr = 'Vector{d}Coefficient{d}(AtomID : Atom Species){d}Orbital Type'.format(d=delim)
+                for item in val:
+                    valStr += '\n,{}'.format(list2csv(item, delim=delim))
+                val = valStr
+            if key in ['center']:
+                valStr = list2csv(val, delim=delim)
+                val = valStr
+
+            csvStr += '{key}{d}{val}\n'.format(key = key, d=delim, val=val)
+        return csvStr
 
     def __init__(self, vector, E=None, occ=None, basisfuncs=[], spin=None, parser=None, center =None, r2=None, ms=None, isHOMO=False, isLUMO=False):
         self._parser=parser
@@ -163,14 +204,30 @@ class nw_atom():
     def shell_charges(self): return self._shell_charges
     @shell_charges.setter
     def shell_charges(self, val): self._shell_charges = val
+    
     @property
-    def coordinates(self): return self._coordinates
+    def coordinates(self): return self._coordinates[-1]
     @coordinates.setter
-    def coordinates(self, val): self._coordinates = val
+    def coordinates(self, val): self._coordinates.append(val)
+    
+    def get_all_coordinates(self, asArray=False):
+        if asArray:
+            return np.array(self._coordinates)
+        else:
+            return self._coordinates
+    
     @property
-    def gradient_forces(self): return self._gradient_forces
+    def gradient_forces(self): return self._gradient_forces[-1]
     @gradient_forces.setter
-    def gradient_forces(self, val): self._gradient_forces = val
+    def gradient_forces(self, val): self._gradient_forces.append(val)
+    
+    def get_all_gradient_forces(self, asArray=False):
+        if asArray:
+            return np.array(self._gradient_forces)
+        else:
+            return self._gradient_forces
+
+    
     @property
     def orbitals_dict(self): return self._orbitals_dict
     @orbitals_dict.setter
@@ -249,15 +306,28 @@ class nw_atom():
             'gradient_forces':self._gradient_forces, 
              }
         return data
+    
+    def get_csv(self, delim = ','):
+        """This is for human readability primarily"""
+        dataDict = self.get_data()
+        csvStr = ''
+        for key, val in sorted([item for item in dataDict.items()]):
+            if key in ['orbitals_dict', 'neighbors', 'distance_dict']: continue 
+            if key in ['shell_charges', 'coordinates', 'gradient_forces']:
+                valStr = list2csv(val, delim=delim)
+                val = valStr
+
+            csvStr += '{key}{d}{val}\n'.format(key = key, d=delim, val= val)
+        return csvStr
 
 
-    def __init__(self, id=None, species=None, charge=None, coordinates=None, partial_charge=None, shell_charges= [], gradient_forces = [], orbitals_dict = None, neighbors = None, distance_dict = None, spin_charge=None,):
+    def __init__(self, id=None, species=None, charge=None, coordinates=None, partial_charge=None, shell_charges= None, gradient_forces = None, orbitals_dict = None, neighbors = None, distance_dict = None, spin_charge=None,):
         self._id = id
         self._species = species
         self._charge = charge
-        self._shell_charges = shell_charges
-        self._coordinates = coordinates
-        self._gradient_forces = gradient_forces
+        if isinstance(shell_charges, type(None)): self._shell_charges = []
+        else: self._shell_charges = shell_charges
+        
     
         #If the ones in the function call default to an empty data type e.g. neighbors = set(), then it won't be local and shared with ALL instances of nw_atom
         if isinstance(orbitals_dict, type(None)): orbitals_dict = dict()
@@ -269,8 +339,12 @@ class nw_atom():
     
         self._partial_charge = partial_charge #Partial charge
         self._spin_charge = spin_charge #Spin charge
-        self._shell_charges = shell_charges
-        self._gradient_forces = gradient_forces #3-list
+        #self._shell_charges = shell_charges
+        #self._gradient_forces = gradient_forces #3-list
+        if isinstance(coordinates, type(None)): self._coordinates = []
+        else: self._coordinates = coordinates
+        if isinstance(gradient_forces, type(None)): self._gradient_forces = [] 
+        else: self._gradient_forces = gradient_forces
 
     def __repr__(self):
         return 'atom({},{})'.format(self._id, self._species)
@@ -419,7 +493,29 @@ class nwchem_parser():
     def spin_density(self): return self._spin_density
     @spin_density.setter
     def spin_density(self, val): self._spin_density = val
+    
+    @property
+    def freq_entropy_dict(self): return self._freq_entropy_dict
+    @freq_entropy_dict.setter
+    def freq_entropy_dict(self, val): self._freq_entropy_dict = val
+    
+    @property
+    def freq_Cv_dict(self): return self._freq_Cv_dict
+    @freq_Cv_dict.setter
+    def freq_Cv_dict(self, val): self._freq_Cv_dict = val
+    
+    @property
+    def freq_correction_dict(self): return self._freq_correction_dict
+    @freq_correction_dict.setter
+    def freq_correction_dict(self, val): self._freq_correction_dict = val
+    
+    @property
+    def temp(self): return self._temp
+    @temp.setter
+    def temp(self, val): self._temp = val
 
+
+    ##====ANALYSIS METHODS====
 
     def get_HOMO_LUMO(self, setFlags=False, **kwargs):
         """This method gets the homo and lumo based on conditions specified in get_atoms(). setFlags=True sets metainfo in HOMO and LUMO. Be careful about doing multple calls if you do setflags."""
@@ -655,6 +751,18 @@ class nwchem_parser():
                 'elementType':str(atom.species),
                 })
             atomArrayNode.appendChild(atomNode)
+        #GONNA TRY SOMETHING WACKY HERE
+        for key, orbital in self._orbital_dict_alpha.items():
+            #print(key)
+            atomNode = self._create_XML_node(doc, 'atom', attributes={
+                'id':'orbital_'+str(orbital.vector),
+                'x3':str(orbital.center[0]),
+                'y3':str(orbital.center[1]),
+                'z3':str(orbital.center[2]),
+                'elementType':'orbital_'+str(orbital.vector),
+                })
+            atomArrayNode.appendChild(atomNode)
+
         molNode.appendChild(atomArrayNode)
         bondArrayNode = self._create_XML_node(doc, 'bondArray')
         bondList = self.get_bonds(**kwargs)
@@ -708,7 +816,11 @@ class nwchem_parser():
             #'gradient_dict'  : self._gradient_dict, 
             'distance_dict'  : self._distance_dict,
             'bond_param_dict': self._bond_param_dict, 
-            'fn'             : self.fn, 
+            'fn'             : self.fn,
+            'temp'           : self._temp,
+            'freq_correction_dict':self._freq_correction_dict,
+            'freq_entropy_dict':self._freq_entropy_dict,
+            'freq_Cv_dict':self._freq_Cv_dict,
         }
         #for key, val in structDataDict.items():
         #    print(key, type(key), '|', type(val))
@@ -722,7 +834,69 @@ class nwchem_parser():
         saveFile = open(savefn, 'w')
         json.dump({'atoms':atomDataDict, 'orbitals':orbitalDataDict, 'structure':structDataDict}, saveFile, indent = 1)
         return json.dumps({'atoms':atomDataDict, 'orbitals':orbitalDataDict, 'structure':structDataDict}, indent = 1)
+    
+    def save_csvs(self, saveDir=None, makeSeperateDir=True, delim = ',', atomsfn = 'atoms.csv', orbitalsfn='orbitals.csv', structfn='structure.csv'):
+        if isinstance(saveDir, type(None)):
+            saveDir = 'nwchem_csvfiles'
+        try:os.mkdir(saveDir)
+        except: pass
+        if makeSeperateDir:
+            saveDir = saveDir + '/{}'.format(self.name.split('.')[0])
+            try:os.mkdir(saveDir)
+            except: pass
+        atomsfn = saveDir + '/' + atomsfn
+        orbitalsfn = saveDir + '/' + orbitalsfn
+        structfn = saveDir + '/' + structfn
+
+
+        atomsFile = open(atomsfn, 'w')
+        orbitalsFile = open(orbitalsfn, 'w')
+        structFile = open(structfn, 'w')
+
+
+        for key, atom in self._atom_dict.items():
+            csvLine = atom.get_csv(delim = delim) 
+            atomsFile.write('{}\n{}'.format(key, csvLine))
+
+        orbitalDict = self._orbital_dict_alpha.copy()
+        orbitalDict.update(self._orbital_dict_beta)
+
+        for key, orbital in orbitalDict.items():
+            csvLine = orbital.get_csv(delim = delim) 
+            orbitalsFile.write('ATOM,{}\n{}\n'.format(key, csvLine))
         
+        structDataDict = {
+            'name'           : self._name,
+            'runinfo'        : self._runinfo, 
+            'nonvar_energies': self._nonvar_energies, 
+            'dft_energies'   : self._dft_energies, 
+            'fn'             : self.fn,
+            'temp'           : self._temp,
+            'freq_correction_dict':self._freq_correction_dict,
+            'freq_entropy_dict':self._freq_entropy_dict,
+            'freq_Cv_dict':self._freq_Cv_dict,
+        }
+        for key, val in sorted([item for item in structDataDict.items()]):
+            if key in ['freq_correction_dict', 'freq_entropy_dict', 'freq_Cv_dict']:
+                valStr = '' 
+                for valKey, valVal in val.items():
+                    if valKey == 'unit': continue
+                    valStr += '\n,{},{}'.format(valKey, valVal)
+                    if valKey not in ['mol. weight', 'symmetry #']:
+                        valStr += ',{}'.format(val['unit'])
+                val = valStr
+                
+
+            elif isinstance(val, dict): 
+                valStr = '' 
+                for valKey, valVal in val.items():
+                    valStr += '\n,{},{}'.format(valKey, valVal)
+                val = valStr
+
+            structFile.write('{key}{d}{val}\n'.format(key = key, d=delim, val= val))
+
+        
+
     def load_json(self, fn):
         #The purpose of making these save/load functions is to speed up the loading time and reduce the memory footprint
         saveFile = open(fn, 'r')
@@ -735,8 +909,12 @@ class nwchem_parser():
         self._nonvar_energies      =structDict['nonvar_energies']
         self._dft_energies         =structDict['dft_energies']   
         self._bond_param_dict      =structDict['bond_param_dict']
-        self.fn                    =structDict['fn']             
-        distance_dict = structDict['distance_dict']
+        self.fn                    =structDict['fn']
+        self._freq_correction_dict  =structDict['freq_correction_dict']
+        self._freq_entropy_dict     =structDict['freq_entropy_dict']   
+        self._freq_Cv_dict          =structDict['freq_Cv_dict']        
+        distance_dict        =structDict['distance_dict']
+        
         for ai, ajDists in distance_dict.items():
             self._distance_dict[int(ai)] = {int(ajid):dist for ajid, dist in ajDists.items()}
 
@@ -803,6 +981,11 @@ class nwchem_parser():
         self._spin_density = dict()
         self._gradient_dict = dict()
         self._distance_dict = dict()
+        self._freq_entropy_dict = dict() #translational, rotational, vibrational, units
+        self._freq_Cv_dict = dict()
+        self._freq_correction_dict = dict()
+        self._temp = None
+
         self._bond_param_dict = DEFAULT_BOND_PARAM_DICT.copy() 
         self.fn = fn
         if verbose:
@@ -870,7 +1053,12 @@ class nwchem_parser():
             if line.startswith('EAF file'): section = 'runinfo'
             
             if line.startswith('NWChem DFT Gradient Module'):module = 'dftgrad';  section = 'dftgrad'
-            
+           
+            if line.startswith('MASS-WEIGHTED NUCLEAR HESSIAN'): module = 'vibration'; section = 'masshessnuclear'
+            if line.startswith('MASS-WEIGHTED PROJECTED HESSIAN'): module = 'vibration'; section = 'masshessprojected'
+            if line.startswith('NORMAL MODE EIGENVECTORS'): module = 'vibration'; section = 'eigenvectors'
+            if line.startswith('Temperature'): module = 'vibration'; section = 'vibparams'
+
             
             #Checks if the section has changed. If so call the appropriate function.
             if section != prevsection:
@@ -885,6 +1073,7 @@ class nwchem_parser():
                 if prevsection == 'moalpha': self._moparser(lineBuffer, 'alpha')
                 if prevsection == 'mobeta': self._moparser(lineBuffer, 'beta')
                 if prevsection == 'dftgrad': self._gradient_parser(lineBuffer)
+                if prevsection == 'vibparams': self._vibconst_parser(lineBuffer)
 
                 prevsection = section
                 lineBuffer = []
@@ -1013,6 +1202,7 @@ class nwchem_parser():
                 z = float(dat[4].replace('D', 'E').strip(','))
                 O.center = np.array([x,y,z])
                 O.r2 = float(dat[6].replace('D', 'E'))
+                #print(O, O.r2, O._r2)
             elif line.startswith('-----'): pass
             elif line.startswith('Bfn.'): pass
             else:
@@ -1091,6 +1281,38 @@ class nwchem_parser():
         self._gradient_dict['Time Info'] = data
         self._gradient_dict['Step Info'] = run
         self._set_atom_dist()
+
+    #Vibrational Analysis
+    def _vibconst_parser(self, lines):
+        #print(lines)
+        sec = None
+        for i, line in enumerate(lines):
+            line = line.strip()
+            dat = line.split()
+            if line.startswith('Temperature'): self._temp = float(dat[2].replace('K', '')) #in Kelvin
+            #Frequency scaling parameter?? do we want this
+            if line.startswith('Zero-Point correction to Energy'): 
+                self._freq_correction_dict['Zero-Point correction to Energy'] = float(dat[5])
+                self._freq_correction_dict['unit'] = dat[6] 
+            if line.startswith('Thermal correction to Energy'): 
+                self._freq_correction_dict['Thermal correction to Energy'] = float(dat[5])
+                self._freq_correction_dict['unit'] = dat[6] 
+            if line.startswith('Thermal correction to Enthalpy'): 
+                self._freq_correction_dict['Thermal correction to Enthalpy'] = float(dat[5])
+                self._freq_correction_dict['unit'] = dat[6] 
+            if line.startswith('Total Entropy'): sec = 'entropy'; continue
+            if line.startswith('Cv'): sec = 'cv'; continue
+            if line.startswith('----------'): sec = None; continue 
+            if sec == 'entropy':
+                self._freq_entropy_dict[dat[1]] = float(dat[3])
+                self._freq_entropy_dict['unit'] = dat[4]
+                if dat[1] == 'Translational': self._freq_entropy_dict['mol. weight'] = float(dat[8].strip(')'))
+                if dat[1] == 'Rotational': self._freq_entropy_dict['symmetry #'] = float(dat[8].strip(')'))
+            if sec == 'cv':
+                self._freq_Cv_dict[dat[1]] = float(dat[3])
+                self._freq_Cv_dict['unit'] = dat[4]
+                
+
 
 if __name__ == '__main__':
     fn = sys.argv[1]

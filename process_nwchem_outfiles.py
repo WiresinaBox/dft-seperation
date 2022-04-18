@@ -6,6 +6,7 @@ import glob
 
 outSaveDir = 'nwchem_outfiles'
 jsonSaveDir = 'nwchem_jsonfiles'
+csvSaveDir = 'nwchem_csvfiles'
 
 try: os.mkdir(outSaveDir)
 except: pass
@@ -23,5 +24,6 @@ for fn in fnList:
         print('Processing {}'.format(fn))
         p = nwparse.nwchem_parser(fn, name = fn.split('/')[1])
         p.save_json(saveDir = jsonSaveDir)
+        p.save_csvs(saveDir = csvSaveDir, makeSeperateDir=True)
     except IsADirectoryError:
         pass

@@ -8,7 +8,7 @@ api = Api(
         blueprint,
         version='0.01',
         title='NWchem Parser API',
-        description='Who knows whats going on',
+        description='',
         base_url='/api/'
         
         ) #Register an api interface to it
@@ -21,9 +21,6 @@ api.add_namespace(ns)
 
 #Data to pass in.
 parserDict = {}
-#reference to function to deal with plot requests. Takes in a list of complex names
-#processComplexFunc = None 
-#plotEnergyFunc = None 
 plotFuncDict = {} #'plot name':function handle
 
 #Each of these defines the endpoints to listen to
@@ -76,18 +73,5 @@ class plotAPI(Resource):
                 data = plotFuncDict[plotType](complexList, orbitalSpecies=orbitalSpecies, viewSize = viewSize)
                 dataDict[plotType] = data
 
-        #if plotType == 'energy':
-        #    if isinstance(plotEnergyFunc, type(None)):
-        #        print('api.py: NOTE! api.processComplexFunc() has not been set yet')
-        #        data = 'api.plotEnergyFunc has not been set yet!'
-        #    else:
-        #        data = plotEnergyFunc(complexList)
-
-        #else:
-        #    if isinstance(processComplexFunc, type(None)):
-        #        print('api.py: NOTE! api.processComplexFunc() has not been set yet')
-        #        data = 'api.processComplexFunc has not been set yet!'
-        #    else:
-        #        data = processComplexFunc(complexList)
         
         return dataDict

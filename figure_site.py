@@ -83,11 +83,15 @@ def getEnergyLevelPlot(complexList, orbitalSpecies=[], viewSize = (1000, 1000), 
     parserList = getParsersFromCall(complexList)#same ordering
     
     fig, ax = plt.subplots(1,1, figsize=(viewSize[0]*0.7/dpi , viewSize[1]*1.5/dpi), tight_layout=True,)
-    
+   
+    if orbitalSpecies == ['']: 
+        conjunction = False
+        orbitalSpecies= None
+    else: conjunction = True
     ylim = [np.inf, -np.inf]
     for i,p in enumerate(parserList):
         orbitalListFull = p.get_orbitals(basisSpecies = None, spin='both', asList = True)
-        orbitalList = p.get_orbitals(basisSpecies = orbitalSpecies, spin='both', asList = True, conjunction=True)
+        orbitalList = p.get_orbitals(basisSpecies = orbitalSpecies, spin='both', asList = True, conjunction=conjunction)
         orbitalE = [O.E for O in orbitalList]
         if len(orbitalE) > 0:
             ylim[0] = min(ylim[0], np.min(orbitalE))
@@ -122,12 +126,63 @@ def getStructPlot(complexList, **kwargs):
     #print(returnDict)
     return json.dumps(returnDict)
 
+def getTablePlot(complexList, **kwargs):
+    parserInfosList = getParserInfoFromCall(complexList)
+    parserList = getParsersFromCall(complexList)#same ordering
+
+    returnDict = {}
+    for i, p in enumerate(parserList):
+        complexName = complexList[i]
+        if complexName not in returnDict:
+            returnDict[complexName] = []
+        #Put anything here and it'll be automatically shoved into tables
+        #returnDict[complexName] =[ {'label':label, 'headers':['header1'...], 'data': [{'label':rowlabel, 'data'}]} ]
+        #DFT Energies
+        returnDict[complexName].append({
+                'label':'DFT Energies', 
+                'headers':['Type', 'Hartrees (a.u.)' ], 
+                'data':[{'label':key, 'data':[val]} for key, val in p.dft_energies.items()]
+                })
+        countDict = {}
+        #Atom Count Dict
+        for a in p.atom_dict.values():
+                if a.species not in countDict: countDict[a.species] = 1
+                else: countDict[a.species] += 1
+        countData = sorted([{'label':species, 'data':[count]} for species, count in countDict.items()], key = lambda x: x['label'])
+        countData.insert(0, {'label':'Total', 'data':[len(p.atom_dict)]})
+        returnDict[complexName].append({
+                'label':'Species', 
+                'headers':['Species', 'Count' ], 
+                'data': countData,
+                })
+        #Vibrational constants
+        returnDict[complexName].append({
+                'label':'Freq. Correction',
+                'headers':['', p._freq_correction_dict['unit']],
+                'data': [{'label':key, 'data':[val]} for key, val in p._freq_correction_dict.items() if key != 'unit'], 
+                })
+        returnDict[complexName].append({
+                'label':'Freq. Entropy',
+                'headers':['', p._freq_entropy_dict['unit']],
+                'data': [{'label':key, 'data':[val]} for key, val in p._freq_entropy_dict.items() if key in ['Translational', 'Rotational', 'Vibrational']],
+                })
+        returnDict[complexName].append({
+                'label':'Freq. Heat Capacity (Cv)',
+                'headers':['', p._freq_Cv_dict['unit']],
+                'data': [{'label':key, 'data':[val]} for key, val in p._freq_Cv_dict.items() if key in ['Translational', 'Rotational', 'Vibrational']],
+                })
+        print(p._freq_Cv_dict)
+        print(p._freq_entropy_dict)
+        print(p._freq_correction_dict)
+    #print(returnDict)
+    return json.dumps(returnDict)
 
 
 def launchSite():
     app = flask.Flask(__name__, template_folder='./templates', static_folder='./templates/static')
     api.parserDict.update(parserDict)
     #Set all of the special functions it calls
+    api.plotFuncDict['tableEnergy'] = getTablePlot
     api.plotFuncDict['structure'] = getStructPlot
     api.plotFuncDict['levels'] = getEnergyLevelPlot 
     api.plotFuncDict['energy'] = getEnergyPlot 
@@ -145,7 +200,7 @@ def launchSite():
 
 if __name__=='__main__':
     app = launchSite()
-    webbrowser.open('http://127.0.0.1:5000/')#Just for debug change this if you ever host the site
+    #webbrowser.open('http://127.0.0.1:5000/')#Just for debug change this if you ever host the site
     app.run(debug=True)
     
 
